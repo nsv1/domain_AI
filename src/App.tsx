@@ -1,405 +1,319 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react'
 
-const API_URL = 'http://localhost:3001';
-
-interface SystemStatus {
-  domainsFile: boolean;
-  scriptExists: boolean;
-  logFile: boolean;
-  domainsCount: number;
+type Step = {
+  id: number
+  title: string
+  description: string
+  solution: string
+  icon: string
+  checked: boolean
 }
 
-const DEFAULT_DOMAINS = `# ============================================
-# OpenAI (ChatGPT, DALL-E, GPT API)
-# ============================================
-openai.com
-chat.openai.com
-chatgpt.com
-chatgpt.live
-api.openai.com
-platform.openai.com
----`;
+const curlCommand = `curl -X POST https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation \\
+-H "Authorization: Bearer YOUR_API_KEY" \\
+-H "Content-Type: application/json" \\
+-d '{"model":"qwen-coder-plus","input":{"prompt":"hello"}}'`
 
 function App() {
-  const [domains, setDomains] = useState<string>('');
-  const [log, setLog] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [error, setError] = useState<string>('');
-  const [success, setSuccess] = useState<string>('');
-  const logRef = useRef<HTMLPreElement>(null);
+  const [steps, setSteps] = useState<Step[]>([
+    {
+      id: 1,
+      title: 'Проверьте интернет-соединение',
+      description: 'Убедитесь, что у вас стабильное подключение к интернету. Попробуйте открыть другие сайты.',
+      solution: 'Перезагрузите роутер, проверьте Wi-Fi или переключитесь на мобильный интернет. Убедитесь, что DNS работает корректно.',
+      icon: '🌐',
+      checked: false,
+    },
+    {
+      id: 2,
+      title: 'Проверьте API-ключ',
+      description: 'Возможно, ваш API-ключ истёк, недействителен или превышен лимит запросов.',
+      solution: 'Зайдите в панель управления (DashScope / Alibaba Cloud) и проверьте статус ключа. Сгенерируйте новый ключ при необходимости.',
+      icon: '🔑',
+      checked: false,
+    },
+    {
+      id: 3,
+      title: 'Проверьте доступность сервиса',
+      description: 'Сервис Qwen3-Coder может быть временно недоступен из-за технических работ или перегрузки серверов.',
+      solution: 'Проверьте статус-страницу Alibaba Cloud / DashScope. Подождите 5-10 минут и попробуйте снова.',
+      icon: '🔧',
+      checked: false,
+    },
+    {
+      id: 4,
+      title: 'Проверьте баланс аккаунта',
+      description: 'Если вы используете платный API, убедитесь что на аккаунте достаточно средств.',
+      solution: 'Пополните баланс в личном кабинете Alibaba Cloud. Бесплатный лимит мог быть исчерпан.',
+      icon: '💰',
+      checked: false,
+    },
+    {
+      id: 5,
+      title: 'Проверьте модель и параметры',
+      description: 'Неправильное имя модели или параметры запроса могут вызвать ошибку подключения.',
+      solution: 'Убедитесь, что имя модели корректно (например, "qwen-coder-plus" или "qwen3-coder"). Проверьте формат запроса по документации.',
+      icon: '⚙️',
+      checked: false,
+    },
+    {
+      id: 6,
+      title: 'Проверьте CORS и прокси',
+      description: 'Если запрос идёт из браузера, может блокироваться CORS. Если через прокси — проверьте его настройки.',
+      solution: 'Добавьте правильные CORS-заголовки на сервере. Если используете прокси — убедитесь что он пропускает HTTPS-запросы к API.',
+      icon: '🛡️',
+      checked: false,
+    },
+    {
+      id: 7,
+      title: 'Проверьте rate limiting',
+      description: 'Превышение лимита запросов в минуту может привести к временной блокировке.',
+      solution: 'Подождите 1 минуту. Добавьте задержки между запросами или реализуйте очередь. Проверьте лимиты в документации.',
+      icon: '⏱️',
+      checked: false,
+    },
+    {
+      id: 8,
+      title: 'Региональные ограничения',
+      description: 'Сервис может быть недоступен в вашем регионе или заблокирован провайдером.',
+      solution: 'Попробуйте использовать VPN. Проверьте, доступен ли сервис из вашего региона. Некоторые модели доступны только в определённых регионах.',
+      icon: '🗺️',
+      checked: false,
+    },
+  ])
 
-  // Загрузка статуса и содержимого файла доменов при монтировании
-  useEffect(() => {
-    fetchStatus();
-    fetchDomains();
-  }, []);
+  const toggleStep = (id: number) => {
+    setSteps(steps.map(step =>
+      step.id === id ? { ...step, checked: !step.checked } : step
+    ))
+  }
 
-  // Автоматическая подстройка высоты textarea при изменении содержимого
-  useEffect(() => {
-    const textarea = document.querySelector('textarea');
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, window.innerHeight * 0.8) + 'px';
-    }
-  }, [domains]);
-
-  const fetchDomains = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/domains`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.exists && data.content) {
-          setDomains(data.content);
-        } else {
-          // Файл не существует — показываем пример
-          setDomains(DEFAULT_DOMAINS);
-        }
-      } else {
-        setDomains(DEFAULT_DOMAINS);
-      }
-    } catch (e) {
-      // API недоступен — показываем пример
-      setDomains(DEFAULT_DOMAINS);
-    }
-  };
-
-  // Автопрокрутка лога
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [log]);
-
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/status`);
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      }
-    } catch (e) {
-      // Сервер может быть недоступен
-      console.log('API сервер недоступен');
-    }
-  };
-
-  const handleProcess = async () => {
-    if (!domains.trim()) {
-      setError('Введите список доменов для обработки');
-      return;
-    }
-
-    setIsProcessing(true);
-    setError('');
-    setSuccess('');
-    setLog('');
-
-    try {
-      const response = await fetch(`${API_URL}/api/process`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ domains }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || 'Произошла ошибка при обработке');
-        if (data.log) {
-          setLog(data.log);
-        }
-      } else {
-        setSuccess(`✅ Обработка завершена. Доменов: ${data.domainsCount}`);
-        setLog(data.log || 'Скрипт выполнен успешно.');
-        fetchStatus();
-      }
-    } catch (e: any) {
-      setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleClear = () => {
-    setDomains('');
-    setLog('');
-    setError('');
-    setSuccess('');
-  };
-
-  const domainCount = domains
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l && !l.startsWith('#') && l !== '---').length;
+  const checkedCount = steps.filter(s => s.checked).length
+  const progress = Math.round((checkedCount / steps.length) * 100)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
       {/* Header */}
-      <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="border-b border-white/10 backdrop-blur-sm bg-white/5">
+        <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <i className="fas fa-route text-white text-lg"></i>
-            </div>
+            <div className="text-4xl">🚨</div>
             <div>
-              <h1 className="text-xl font-bold text-white">AI Router Manager</h1>
-              <p className="text-xs text-slate-400">Управление маршрутизацией AI-доменов</p>
+              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
+                Ошибка подключения к Qwen3-Coder
+              </h1>
+              <p className="text-slate-400 mt-1 text-sm md:text-base">
+                «Oops! There was an issue connecting to Qwen3-Coder. Неизвестная ошибка»
+              </p>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {status && (
-              <div className="flex items-center gap-3 text-xs">
-                <StatusBadge
-                  label="Домены"
-                  ok={status.domainsFile}
-                  detail={`${status.domainsCount} шт.`}
-                />
-                <StatusBadge
-                  label="Скрипт"
-                  ok={status.scriptExists}
-                />
-                <StatusBadge
-                  label="Лог"
-                  ok={status.logFile}
-                />
-              </div>
-            )}
-            {!status && (
-              <span className="text-xs text-amber-400 flex items-center gap-1">
-                <i className="fas fa-exclamation-triangle"></i>
-                API недоступен
-              </span>
-            )}
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Domains Input */}
-          <div className="space-y-4">
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-file-alt text-blue-400"></i>
-                  <h2 className="font-semibold text-white">Загрузка доменов</h2>
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Error explanation */}
+        <section className="mb-8 p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
+            <span>💡</span> Что означает эта ошибка?
+          </h2>
+          <p className="text-slate-300 leading-relaxed">
+            Эта ошибка означает, что клиент (приложение, IDE или браузер) не смог установить соединение
+            с API модели <strong className="text-purple-300">Qwen3-Coder</strong> от Alibaba Cloud.
+            Причин может быть множество — от проблем с сетью до некорректных настроек API.
+            Пройдитесь по чеклисту ниже, чтобы найти и устранить проблему.
+          </p>
+        </section>
+
+        {/* Progress bar */}
+        <section className="mb-6 p-4 rounded-xl bg-white/5 border border-white/10">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-slate-400">Прогресс диагностики</span>
+            <span className="text-sm font-mono text-purple-300">{checkedCount}/{steps.length} проверено</span>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </section>
+
+        {/* Checklist */}
+        <section className="space-y-4">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <span>📋</span> Чеклист для решения проблемы
+          </h2>
+
+          {steps.map((step) => (
+            <div
+              key={step.id}
+              className={`p-5 rounded-xl border transition-all duration-300 cursor-pointer hover:scale-[1.01] ${
+                step.checked
+                  ? 'bg-green-500/10 border-green-500/30'
+                  : 'bg-white/5 border-white/10 hover:border-purple-500/30'
+              }`}
+              onClick={() => toggleStep(step.id)}
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 mt-1">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg border-2 transition-all ${
+                    step.checked
+                      ? 'bg-green-500 border-green-400'
+                      : 'border-slate-500 hover:border-purple-400'
+                  }`}>
+                    {step.checked ? '✓' : step.id}
+                  </div>
                 </div>
-                <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">
-                  {domainCount} доменов
-                </span>
-              </div>
-              <div className="p-4">
-                <textarea
-                  value={domains}
-                  onChange={(e) => setDomains(e.target.value)}
-                  placeholder={`Введите список доменов, например:\n\n# ============================================\n# OpenAI (ChatGPT, DALL-E, GPT API)\n# ============================================\nopenai.com\nchat.openai.com\nchatgpt.com\napi.openai.com\n---`}
-                  className="w-full bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
-                  style={{ minHeight: '384px', maxHeight: '80vh', height: 'auto' }}
-                  spellCheck={false}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, window.innerHeight * 0.8) + 'px';
-                  }}
-                />
-              </div>
-              <div className="px-4 py-3 border-t border-slate-700/50 flex items-center gap-3">
-                <button
-                  onClick={handleProcess}
-                  disabled={isProcessing || !domains.trim()}
-                  className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
-                    isProcessing
-                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
-                  }`}
-                >
-                  {isProcessing ? (
-                    <>
-                      <i className="fas fa-spinner fa-spin"></i>
-                      Обработка...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-play"></i>
-                      Обработать
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleClear}
-                  disabled={isProcessing}
-                  className="px-4 py-3 rounded-lg font-semibold text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all border border-slate-600/30"
-                >
-                  <i className="fas fa-trash-alt"></i>
-                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-2xl">{step.icon}</span>
+                    <h3 className={`font-semibold text-lg ${step.checked ? 'text-green-300 line-through' : 'text-white'}`}>
+                      {step.title}
+                    </h3>
+                  </div>
+                  <p className="text-slate-400 text-sm mb-3">{step.description}</p>
+                  <div className="p-3 rounded-lg bg-black/20 border border-white/5">
+                    <p className="text-sm text-slate-300">
+                      <span className="text-green-400 font-semibold">Решение: </span>
+                      {step.solution}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
+          ))}
+        </section>
 
-            {/* Info Panel */}
-            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
-                <i className="fas fa-info-circle text-blue-400"></i>
-                Информация
-              </h3>
-              <ul className="text-xs text-slate-400 space-y-1.5">
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Домены сохраняются в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
-                </li>
-
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
-                </li>
-              </ul>
+        {/* Quick commands */}
+        <section className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <span>⚡</span> Быстрая диагностика (команды)
+          </h2>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-slate-400 mb-1">Проверка доступности API:</p>
+              <pre className="p-3 rounded-lg bg-black/40 text-green-300 text-sm font-mono overflow-x-auto whitespace-pre-wrap">
+                {curlCommand}
+              </pre>
+            </div>
+            <div>
+              <p className="text-sm text-slate-400 mb-1">Проверка DNS:</p>
+              <code className="block p-3 rounded-lg bg-black/40 text-green-300 text-sm font-mono overflow-x-auto">
+                nslookup dashscope.aliyuncs.com
+              </code>
+            </div>
+            <div>
+              <p className="text-sm text-slate-400 mb-1">Проверка соединения:</p>
+              <code className="block p-3 rounded-lg bg-black/40 text-green-300 text-sm font-mono overflow-x-auto">
+                ping -c 4 dashscope.aliyuncs.com
+              </code>
             </div>
           </div>
+        </section>
 
-          {/* Right Column - Log Output */}
-          <div className="space-y-4">
-            {/* Messages */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
-                <i className="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
-                <p className="text-sm text-red-300">{error}</p>
-              </div>
-            )}
-            {success && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-start gap-3">
-                <i className="fas fa-check-circle text-green-400 mt-0.5"></i>
-                <p className="text-sm text-green-300">{success}</p>
-              </div>
-            )}
-
-            {/* Log Panel */}
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-terminal text-green-400"></i>
-                  <h2 className="font-semibold text-white">Лог</h2>
-                </div>
-                {log && (
-                  <button
-                    onClick={() => setLog('')}
-                    className="text-xs text-slate-400 hover:text-white transition-colors"
-                  >
-                    <i className="fas fa-times"></i> Очистить
-                  </button>
-                )}
-              </div>
-              <div className="p-4">
-                <pre
-                  ref={logRef}
-                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap break-all"
-                >
-                  {log || (
-                    <span className="text-slate-500 italic">
-                      Здесь будет отображаться лог выполнения скрипта...
-                    </span>
-                  )}
-                </pre>
-              </div>
-            </div>
-
-            {/* Process Steps */}
-            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <i className="fas fa-list-ol text-purple-400"></i>
-                Этапы обработки
-              </h3>
-              <div className="space-y-2">
-                <ProcessStep
-                  step={1}
-                  title="Сохранение доменов"
-                  description="/etc/ai-domains.list"
-                  active={isProcessing}
-                />
-                <ProcessStep
-                  step={2}
-                  title="Запуск скрипта"
-                  description="sudo /usr/local/bin/update-ai-router.sh"
-                  active={isProcessing}
-                />
-                <ProcessStep
-                  step={3}
-                  title="Резолвинг DNS"
-                  description="dig @127.0.0.1 +short"
-                  active={isProcessing}
-                />
-                <ProcessStep
-                  step={4}
-                  title="Обновление маршрутов"
-                  description="ip route replace ... dev awg0"
-                  active={isProcessing}
-                />
-                <ProcessStep
-                  step={5}
-                  title="Перезагрузка dnsmasq"
-                  description="systemctl reload dnsmasq"
-                  active={isProcessing}
-                />
-              </div>
-            </div>
+        {/* Common causes table */}
+        <section className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <span>📊</span> Частые причины ошибки
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="text-left py-3 px-2 text-slate-400 font-medium">Код ошибки</th>
+                  <th className="text-left py-3 px-2 text-slate-400 font-medium">Причина</th>
+                  <th className="text-left py-3 px-2 text-slate-400 font-medium">Что делать</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-300">
+                <tr className="border-b border-white/5">
+                  <td className="py-3 px-2 font-mono text-red-300">401</td>
+                  <td className="py-3 px-2">Неверный API-ключ</td>
+                  <td className="py-3 px-2">Проверьте и обновите ключ</td>
+                </tr>
+                <tr className="border-b border-white/5">
+                  <td className="py-3 px-2 font-mono text-orange-300">403</td>
+                  <td className="py-3 px-2">Нет доступа к модели</td>
+                  <td className="py-3 px-2">Активируйте модель в консоли</td>
+                </tr>
+                <tr className="border-b border-white/5">
+                  <td className="py-3 px-2 font-mono text-yellow-300">429</td>
+                  <td className="py-3 px-2">Превышен лимит запросов</td>
+                  <td className="py-3 px-2">Подождите или увеличьте квоту</td>
+                </tr>
+                <tr className="border-b border-white/5">
+                  <td className="py-3 px-2 font-mono text-blue-300">500</td>
+                  <td className="py-3 px-2">Внутренняя ошибка сервера</td>
+                  <td className="py-3 px-2">Подождите и повторите</td>
+                </tr>
+                <tr className="border-b border-white/5">
+                  <td className="py-3 px-2 font-mono text-purple-300">503</td>
+                  <td className="py-3 px-2">Сервис временно недоступен</td>
+                  <td className="py-3 px-2">Проверьте статус-страницу</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-2 font-mono text-pink-300">—</td>
+                  <td className="py-3 px-2">Таймаут соединения</td>
+                  <td className="py-3 px-2">Проверьте сеть / VPN / прокси</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
+
+        {/* Links */}
+        <section className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <span>🔗</span> Полезные ссылки
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <a
+              href="https://help.aliyun.com/zh/model-studio/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 transition-colors flex items-center gap-2"
+            >
+              <span>📖</span>
+              <span className="text-purple-300 text-sm">Документация DashScope</span>
+            </a>
+            <a
+              href="https://dashscope.console.aliyun.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+            >
+              <span>🔑</span>
+              <span className="text-blue-300 text-sm">Консоль DashScope</span>
+            </a>
+            <a
+              href="https://status.alibabacloud.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors flex items-center gap-2"
+            >
+              <span>📊</span>
+              <span className="text-green-300 text-sm">Статус сервисов Alibaba Cloud</span>
+            </a>
+            <a
+              href="https://github.com/QwenLM/Qwen2.5-Coder"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 transition-colors flex items-center gap-2"
+            >
+              <span>💻</span>
+              <span className="text-orange-300 text-sm">Qwen-Coder на GitHub</span>
+            </a>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="mt-12 pb-8 text-center text-slate-500 text-sm">
+          <p>Если ничего не помогло — попробуйте обратиться в поддержку Alibaba Cloud или на форум сообщества.</p>
+          <p className="mt-2">💬 Часто проблема решается простой перезагрузкой приложения или обновлением API-ключа.</p>
+        </footer>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-700/30 mt-8">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-500">
-          <span>AI Router Manager v1.0</span>
-          <span>AmneziaWG + dnsmasq + BGP</span>
-        </div>
-      </footer>
     </div>
-  );
+  )
 }
 
-// Компонент статуса
-function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail?: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={`w-2 h-2 rounded-full ${ok ? 'bg-green-400' : 'bg-red-400'}`}></div>
-      <span className="text-slate-400">{label}</span>
-      {detail && <span className="text-slate-500">({detail})</span>}
-    </div>
-  );
-}
-
-// Компонент этапа обработки
-function ProcessStep({ step, title, description, active }: {
-  step: number;
-  title: string;
-  description: string;
-  active: boolean;
-}) {
-  return (
-    <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-      active ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-slate-800/30'
-    }`}>
-      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-        active
-          ? 'bg-blue-500/20 text-blue-400'
-          : 'bg-slate-700/50 text-slate-500'
-      }`}>
-        {active ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : step}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-xs font-medium ${active ? 'text-blue-300' : 'text-slate-400'}`}>
-          {title}
-        </p>
-        <p className="text-[10px] text-slate-500 truncate font-mono">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-export default App;
+export default App
