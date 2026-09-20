@@ -216,10 +216,7 @@ platform.openai.com
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Скрипт сам игнорирует комментарии (#) и разделители (---)</span>
-                </li>
+
                 <li className="flex items-start gap-2">
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>

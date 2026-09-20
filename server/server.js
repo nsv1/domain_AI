@@ -49,31 +49,24 @@ app.post('/api/process', async (req, res) => {
     console.log(`✅ Домены сохранены в ${DOMAINS_FILE} (${parsedDomains.length} шт.)`);
 
     exec(`sudo ${SCRIPT_PATH}`, { timeout: 120000 }, (error, stdout, stderr) => {
+      // Логируем вывод скрипта в консоль сервера
+      if (stdout) console.log(stdout);
+      if (stderr) console.error(stderr);
+
       if (error) {
         console.error(`Ошибка выполнения скрипта: ${error.message}`);
         return res.status(500).json({
           error: `Ошибка выполнения скрипта: ${error.message}`,
-          stderr: stderr,
+          log: stdout || stderr || 'Скрипт завершился с ошибкой без вывода.',
         });
       }
 
-      try {
-        const logContent = fs.readFileSync(LOG_FILE, 'utf8');
-        const sessions = logContent.split('==================================================');
-        const lastSession = sessions.slice(-3).join('==================================================');
-
-        res.json({
-          success: true,
-          domainsCount: parsedDomains.length,
-          log: lastSession.trim(),
-        });
-      } catch (logError) {
-        res.json({
-          success: true,
-          domainsCount: parsedDomains.length,
-          log: stdout || 'Скрипт выполнен успешно, но лог-файл недоступен.',
-        });
-      }
+      // Возвращаем stdout текущего запуска скрипта как лог
+      res.json({
+        success: true,
+        domainsCount: parsedDomains.length,
+        log: stdout || 'Скрипт выполнен без вывода.',
+      });
     });
   } catch (writeError) {
     console.error(`Ошибка записи файла: ${writeError.message}`);
