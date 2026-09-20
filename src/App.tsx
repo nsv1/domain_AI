@@ -9,8 +9,7 @@ interface SystemStatus {
   domainsCount: number;
 }
 
-function App() {
-  const [domains, setDomains] = useState<string>(`# ============================================
+const DEFAULT_DOMAINS = `# ============================================
 # OpenAI (ChatGPT, DALL-E, GPT API)
 # ============================================
 openai.com
@@ -19,7 +18,10 @@ chatgpt.com
 chatgpt.live
 api.openai.com
 platform.openai.com
----`);
+---`;
+
+function App() {
+  const [domains, setDomains] = useState<string>('');
   const [log, setLog] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -27,10 +29,31 @@ platform.openai.com
   const [success, setSuccess] = useState<string>('');
   const logRef = useRef<HTMLPreElement>(null);
 
-  // Загрузка статуса при монтировании
+  // Загрузка статуса и содержимого файла доменов при монтировании
   useEffect(() => {
     fetchStatus();
+    fetchDomains();
   }, []);
+
+  const fetchDomains = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/domains`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.exists && data.content) {
+          setDomains(data.content);
+        } else {
+          // Файл не существует — показываем пример
+          setDomains(DEFAULT_DOMAINS);
+        }
+      } else {
+        setDomains(DEFAULT_DOMAINS);
+      }
+    } catch (e) {
+      // API недоступен — показываем пример
+      setDomains(DEFAULT_DOMAINS);
+    }
+  };
 
   // Автопрокрутка лога
   useEffect(() => {
@@ -165,7 +188,7 @@ platform.openai.com
                   value={domains}
                   onChange={(e) => setDomains(e.target.value)}
                   placeholder={`Введите список доменов, например:\n\n# ============================================\n# OpenAI (ChatGPT, DALL-E, GPT API)\n# ============================================\nopenai.com\nchat.openai.com\nchatgpt.com\napi.openai.com\n---`}
-                  className="w-full h-72 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
+                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
                   spellCheck={false}
                 />
               </div>
@@ -216,10 +239,7 @@ platform.openai.com
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Комментарии (#) и разделители (---) игнорируются</span>
-                </li>
+
                 <li className="flex items-start gap-2">
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
