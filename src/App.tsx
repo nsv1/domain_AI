@@ -35,6 +35,15 @@ function App() {
     fetchDomains();
   }, []);
 
+  // Автоматическая подстройка высоты textarea при изменении содержимого
+  useEffect(() => {
+    const textarea = document.querySelector('textarea');
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, window.innerHeight * 0.8) + 'px';
+    }
+  }, [domains]);
+
   const fetchDomains = async () => {
     try {
       const response = await fetch(`${API_URL}/api/domains`);
@@ -188,8 +197,14 @@ function App() {
                   value={domains}
                   onChange={(e) => setDomains(e.target.value)}
                   placeholder={`Введите список доменов, например:\n\n# ============================================\n# OpenAI (ChatGPT, DALL-E, GPT API)\n# ============================================\nopenai.com\nchat.openai.com\nchatgpt.com\napi.openai.com\n---`}
-                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
+                  className="w-full bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
+                  style={{ minHeight: '384px', maxHeight: '80vh', height: 'auto' }}
                   spellCheck={false}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, window.innerHeight * 0.8) + 'px';
+                  }}
                 />
               </div>
               <div className="px-4 py-3 border-t border-slate-700/50 flex items-center gap-3">
