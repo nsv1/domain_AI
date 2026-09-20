@@ -104,7 +104,7 @@ app.get('/api/status', (req, res) => {
 const staticDir = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(staticDir)) {
   app.use(express.static(staticDir));
-  app.get('*', (req, res) => {
+  app.get('/*splat', (req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
 }
