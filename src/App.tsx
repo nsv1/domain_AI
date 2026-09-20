@@ -218,7 +218,7 @@ platform.openai.com
                 </li>
                 <li className="flex items-start gap-2">
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Комментарии (#) и разделители (---) игнорируются</span>
+                  <span>Скрипт сам игнорирует комментарии (#) и разделители (---)</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <i className="fas fa-check text-green-400 mt-0.5"></i>

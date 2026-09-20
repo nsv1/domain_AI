@@ -41,7 +41,8 @@ app.post('/api/process', async (req, res) => {
     return res.status(400).json({ error: 'Не найдено ни одного домена' });
   }
 
-  const domainsContent = parsedDomains.join('\n') + '\n';
+  // Записываем исходный текст как есть — скрипт сам фильтрует комментарии и разделители
+  const domainsContent = domains.endsWith('\n') ? domains : domains + '\n';
 
   try {
     fs.writeFileSync(DOMAINS_FILE, domainsContent, 'utf8');
