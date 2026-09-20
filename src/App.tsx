@@ -9,8 +9,7 @@ interface SystemStatus {
   domainsCount: number;
 }
 
-function App() {
-  const [domains, setDomains] = useState<string>(`# ============================================
+const DEFAULT_DOMAINS = `# ============================================
 # OpenAI (ChatGPT, DALL-E, GPT API)
 # ============================================
 openai.com
@@ -19,7 +18,10 @@ chatgpt.com
 chatgpt.live
 api.openai.com
 platform.openai.com
----`);
+---`;
+
+function App() {
+  const [domains, setDomains] = useState<string>('');
   const [log, setLog] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -27,10 +29,31 @@ platform.openai.com
   const [success, setSuccess] = useState<string>('');
   const logRef = useRef<HTMLPreElement>(null);
 
-  // Загрузка статуса при монтировании
+  // Загрузка статуса и содержимого файла доменов при монтировании
   useEffect(() => {
     fetchStatus();
+    fetchDomains();
   }, []);
+
+  const fetchDomains = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/domains`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.exists && data.content) {
+          setDomains(data.content);
+        } else {
+          // Файл не существует — показываем пример
+          setDomains(DEFAULT_DOMAINS);
+        }
+      } else {
+        setDomains(DEFAULT_DOMAINS);
+      }
+    } catch (e) {
+      // API недоступен — показываем пример
+      setDomains(DEFAULT_DOMAINS);
+    }
+  };
 
   // Автопрокрутка лога
   useEffect(() => {

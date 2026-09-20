@@ -76,6 +76,20 @@ app.post('/api/process', async (req, res) => {
   }
 });
 
+// API: Получить текущее содержимое файла доменов
+app.get('/api/domains', (req, res) => {
+  if (!fs.existsSync(DOMAINS_FILE)) {
+    return res.json({ content: '', exists: false });
+  }
+
+  try {
+    const content = fs.readFileSync(DOMAINS_FILE, 'utf8');
+    res.json({ content, exists: true });
+  } catch (e) {
+    res.status(500).json({ error: `Ошибка чтения файла: ${e.message}` });
+  }
+});
+
 // API: Статус системы
 app.get('/api/status', (req, res) => {
   const checks = {
