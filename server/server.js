@@ -55,17 +55,37 @@ app.post('/api/process', async (req, res) => {
 
       if (error) {
         console.error(`Ошибка выполнения скрипта: ${error.message}`);
+        
+        // Формируем лог с информацией об ошибке
+        let errorLog = `❌ Ошибка выполнения скрипта: ${error.message}\n\n`;
+        if (stdout) errorLog += `=== STDOUT ===\n${stdout}\n`;
+        if (stderr) errorLog += `=== STDERR ===\n${stderr}\n`;
+        if (!stdout && !stderr) errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
+        
         return res.status(500).json({
           error: `Ошибка выполнения скрипта: ${error.message}`,
-          log: stdout || stderr || 'Скрипт завершился с ошибкой без вывода.',
+          log: errorLog,
         });
       }
 
-      // Возвращаем stdout текущего запуска скрипта как лог
+      // Проверяем stdout на пустоту
+      if (!stdout || stdout.trim() === '') {
+        const warningLog = stderr 
+          ? `⚠️ STDOUT пуст, но есть STDERR:\n${stderr}`
+          : '⚠️ Скрипт выполнен успешно, но stdout пуст. Возможно, скрипт не выводит данные или возникла проблема с буферизацией вывода.';
+        
+        return res.json({
+          success: true,
+          domainsCount: parsedDomains.length,
+          log: warningLog,
+        });
+      }
+
+      // Возвращаем stdout
       res.json({
         success: true,
         domainsCount: parsedDomains.length,
-        log: stdout || 'Скрипт выполнен без вывода.',
+        log: stdout,
       });
     });
   } catch (writeError) {
