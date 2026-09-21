@@ -1,11 +1,12 @@
 #!/bin/bash
-# update-ai-router.sh
-# Скрипт обновления маршрутов для AI-доменов через AmneziaWG
+# update-ai-router.sh - Финальная версия
+# Резолвит через чистые DNS (1.1.1.1, 8.8.8.8) напрямую через туннель
 
 DOMAINS_FILE="/etc/ai-domains.list"
 LOG_FILE="/var/log/ai-router.log"
 INTERFACE="awg0"
-DNS_SERVER="127.0.0.1"
+# Используем чистые DNS напрямую (они идут через туннель awg0)
+DNS_SERVERS=("1.1.1.1" "8.8.8.8" "1.0.0.1")
 
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -22,7 +23,7 @@ separator() {
 separator
 log "🚀 Начало обновления маршрутов"
 
-# Проверка наличия файла доменов
+# Проверка файла доменов
 if [ ! -f "$DOMAINS_FILE" ]; then
     log "❌ Файл доменов не найден: $DOMAINS_FILE"
     exit 1
@@ -38,8 +39,8 @@ fi
 DOMAIN_COUNT=$(echo "$DOMAINS" | wc -l)
 log "📋 Найдено доменов: $DOMAIN_COUNT"
 
-# Резолвинг DNS для каждого домена
-log "🔍 Резолвинг DNS..."
+# Резолвинг через чистые DNS
+log "🔍 Резолвинг DNS через 1.1.1.1/8.8.8.8..."
 ALL_IPS=""
 RESOLVED=0
 FAILED=0
@@ -47,13 +48,16 @@ FAILED=0
 while IFS= read -r domain; do
     [ -z "$domain" ] && continue
     
-    # Получаем IP через dig
-    IPS=$(dig @"$DNS_SERVER" +short "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    # Пробуем резолвить через каждый DNS
+    IPS=""
+    for dns in "${DNS_SERVERS[@]}"; do
+        IPS=$(dig @"$dns" +short "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+        [ -n "$IPS" ] && break
+    done
     
     if [ -n "$IPS" ]; then
         while IFS= read -r ip; do
             [ -z "$ip" ] && continue
-            # Проверяем, не добавляли ли уже этот IP
             if ! echo "$ALL_IPS" | grep -q "^${ip}$" 2>/dev/null; then
                 ALL_IPS="${ALL_IPS}${ip}\n"
             fi
@@ -87,13 +91,9 @@ echo -e "$ALL_IPS" | grep '[0-9]' 2>/dev/null | while IFS= read -r ip; do
     ip route replace "$ip" dev "$INTERFACE" 2>/dev/null || \
     ip route add "$ip" dev "$INTERFACE" 2>/dev/null || \
     log "  ⚠️ Не удалось добавить маршрут для $ip"
-done
+done || true
 
 log "✅ Маршруты обновлены: $IP_COUNT IP через $INTERFACE"
-
-# Перезагрузка dnsmasq
-log "🔄 Перезагрузка dnsmasq..."
-systemctl reload dnsmasq 2>/dev/null && log "✅ dnsmasq перезагружен" || log "⚠️ Не удалось перезагрузить dnsmasq"
 
 separator
 log "✅ Обновление завершено успешно"
