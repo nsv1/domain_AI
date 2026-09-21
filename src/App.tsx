@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 
-const API_URL = 'http://localhost:3001';
+// Используем относительные пути — фронтенд раздаётся тем же сервером
+const API_URL = '';
 
 interface SystemStatus {
   domainsFile: boolean;
