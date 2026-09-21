@@ -24,7 +24,7 @@ platform.openai.com
 function App() {
   const [domains, setDomains] = useState<string>('');
   const [log, setLog] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentStep, setCurrentStep] = useState<number>(0); // 0 = idle, 1-5 = active step, 6 = all done
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -89,10 +89,27 @@ function App() {
       return;
     }
 
-    setIsProcessing(true);
     setError('');
     setSuccess('');
     setLog('');
+    setCurrentStep(0);
+
+    // Последовательная анимация этапов
+    const stepTimers: ReturnType<typeof setTimeout>[] = [];
+    
+    const startSteps = () => {
+      stepTimers.push(setTimeout(() => setCurrentStep(1), 0));      // Сохранение доменов
+      stepTimers.push(setTimeout(() => setCurrentStep(2), 500));    // Запуск скрипта
+      stepTimers.push(setTimeout(() => setCurrentStep(3), 2000));   // Резолвинг DNS
+      stepTimers.push(setTimeout(() => setCurrentStep(4), 4000));   // Обновление маршрутов
+      stepTimers.push(setTimeout(() => setCurrentStep(5), 5500));   // Перезагрузка dnsmasq
+    };
+
+    const clearSteps = () => {
+      stepTimers.forEach(timer => clearTimeout(timer));
+    };
+
+    startSteps();
 
     try {
       const response = await fetch(`${API_URL}/api/process`, {
@@ -118,7 +135,10 @@ function App() {
     } catch (e: any) {
       setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
     } finally {
-      setIsProcessing(false);
+      clearSteps();
+      setCurrentStep(6); // Все этапы завершены
+      // Через 2 секунды сбрасываем в idle
+      setTimeout(() => setCurrentStep(0), 2000);
     }
   };
 
@@ -224,14 +244,14 @@ function App() {
               <div className="px-4 py-3 border-t border-slate-700/50 flex items-center gap-3">
                 <button
                   onClick={handleProcess}
-                  disabled={isProcessing || !domains.trim()}
+                  disabled={(currentStep > 0 && currentStep < 6) || !domains.trim()}
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
-                    isProcessing
+                    (currentStep > 0 && currentStep < 6)
                       ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
                   }`}
                 >
-                  {isProcessing ? (
+                  {(currentStep > 0 && currentStep < 6) ? (
                     <>
                       <i className="fas fa-spinner fa-spin"></i>
                       Обработка...
@@ -245,7 +265,7 @@ function App() {
                 </button>
                 <button
                   onClick={handleClear}
-                  disabled={isProcessing}
+                  disabled={currentStep > 0 && currentStep < 6}
                   className="px-4 py-3 rounded-lg font-semibold text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all border border-slate-600/30"
                 >
                   <i className="fas fa-trash-alt"></i>
@@ -334,31 +354,31 @@ function App() {
                   step={1}
                   title="Сохранение доменов"
                   description="/etc/ai-domains.list"
-                  active={isProcessing}
+                  status={currentStep === 6 || currentStep > 1 ? 'done' : currentStep === 1 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={2}
                   title="Запуск скрипта"
                   description="sudo /usr/local/bin/update-ai-router.sh"
-                  active={isProcessing}
+                  status={currentStep === 6 || currentStep > 2 ? 'done' : currentStep === 2 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={3}
                   title="Резолвинг DNS"
                   description="dig @127.0.0.1 +short"
-                  active={isProcessing}
+                  status={currentStep === 6 || currentStep > 3 ? 'done' : currentStep === 3 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={4}
                   title="Обновление маршрутов"
                   description="ip route replace ... dev awg0"
-                  active={isProcessing}
+                  status={currentStep === 6 || currentStep > 4 ? 'done' : currentStep === 4 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={5}
                   title="Перезагрузка dnsmasq"
                   description="systemctl reload dnsmasq"
-                  active={isProcessing}
+                  status={currentStep === 6 || currentStep > 5 ? 'done' : currentStep === 5 ? 'active' : 'idle'}
                 />
               </div>
             </div>
@@ -389,25 +409,39 @@ function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail
 }
 
 // Компонент этапа обработки
-function ProcessStep({ step, title, description, active }: {
+function ProcessStep({ step, title, description, status }: {
   step: number;
   title: string;
   description: string;
-  active: boolean;
+  status: 'idle' | 'active' | 'done';
 }) {
   return (
     <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-      active ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-slate-800/30'
+      status === 'active' ? 'bg-blue-500/10 border border-blue-500/20' :
+      status === 'done' ? 'bg-green-500/10 border border-green-500/20' :
+      'bg-slate-800/30'
     }`}>
       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-        active
+        status === 'active'
           ? 'bg-blue-500/20 text-blue-400'
+          : status === 'done'
+          ? 'bg-green-500/20 text-green-400'
           : 'bg-slate-700/50 text-slate-500'
       }`}>
-        {active ? <i className="fas fa-spinner fa-spin text-[10px]"></i> : step}
+        {status === 'active' ? (
+          <i className="fas fa-spinner fa-spin text-[10px]"></i>
+        ) : status === 'done' ? (
+          <i className="fas fa-check text-[10px]"></i>
+        ) : (
+          step
+        )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-xs font-medium ${active ? 'text-blue-300' : 'text-slate-400'}`}>
+        <p className={`text-xs font-medium ${
+          status === 'active' ? 'text-blue-300' :
+          status === 'done' ? 'text-green-300' :
+          'text-slate-400'
+        }`}>
           {title}
         </p>
         <p className="text-[10px] text-slate-500 truncate font-mono">{description}</p>
