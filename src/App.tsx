@@ -27,8 +27,8 @@ function App() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [domainsSource, setDomainsSource] = useState<'file' | 'default' | 'loading'>('loading');
   const logRef = useRef<HTMLPreElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Загрузка статуса и содержимого файла доменов при монтировании
   useEffect(() => {
@@ -43,16 +43,20 @@ function App() {
         const data = await response.json();
         if (data.exists && data.content) {
           setDomains(data.content);
+          setDomainsSource('file');
         } else {
           // Файл не существует — показываем пример
           setDomains(DEFAULT_DOMAINS);
+          setDomainsSource('default');
         }
       } else {
         setDomains(DEFAULT_DOMAINS);
+        setDomainsSource('default');
       }
     } catch (e) {
       // API недоступен — показываем пример
       setDomains(DEFAULT_DOMAINS);
+      setDomainsSource('default');
     }
   };
 
@@ -63,15 +67,7 @@ function App() {
     }
   }, [log]);
 
-  // Автоподстройка высоты textarea под содержимое
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      const scrollHeight = textareaRef.current.scrollHeight;
-      // Минимум 384px (h-96), максимум — по содержимому
-      textareaRef.current.style.height = `${Math.max(384, scrollHeight)}px`;
-    }
-  }, [domains]);
+
 
   const fetchStatus = async () => {
     try {
@@ -189,18 +185,38 @@ function App() {
                 <div className="flex items-center gap-2">
                   <i className="fas fa-file-alt text-blue-400"></i>
                   <h2 className="font-semibold text-white">Загрузка доменов</h2>
+                  {domainsSource === 'file' && (
+                    <span className="text-[10px] text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <i className="fas fa-database text-[8px]"></i>
+                      из файла
+                    </span>
+                  )}
+                  {domainsSource === 'default' && (
+                    <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <i className="fas fa-exclamation-triangle text-[8px]"></i>
+                      шаблон
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">
                   {domainCount} доменов
                 </span>
               </div>
               <div className="p-4">
+                {domainsSource === 'default' && (
+                  <div className="mb-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-2">
+                    <i className="fas fa-exclamation-triangle text-amber-400 mt-0.5 text-sm"></i>
+                    <div className="text-xs text-amber-300">
+                      <p className="font-semibold mb-1">API сервер недоступен или файл не найден</p>
+                      <p className="text-amber-400/80">Отображается шаблон. Проверьте, что сервер запущен (<code className="bg-slate-700/50 px-1 rounded">node server.js</code>) и файл <code className="bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code> существует.</p>
+                    </div>
+                  </div>
+                )}
                 <textarea
-                  ref={textareaRef}
                   value={domains}
                   onChange={(e) => setDomains(e.target.value)}
                   placeholder={`Введите список доменов, например:\n\n# ============================================\n# OpenAI (ChatGPT, DALL-E, GPT API)\n# ============================================\nopenai.com\nchat.openai.com\nchatgpt.com\napi.openai.com\n---`}
-                  className="w-full min-h-[384px] bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
+                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-y-auto"
                   spellCheck={false}
                 />
               </div>
