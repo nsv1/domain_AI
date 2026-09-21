@@ -11,7 +11,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Trust proxy (nginx reverse proxy)
+app.set('trust proxy', 1);
+
+// CORS — разрешаем запросы с любого origin (для reverse proxy)
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
 app.use(express.json({ limit: '1mb' }));
 
 // Пути к системным файлам (можно переопределить через ENV)
