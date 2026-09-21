@@ -53,19 +53,29 @@ app.post('/api/process', async (req, res) => {
       if (stdout) console.log(stdout);
       if (stderr) console.error(stderr);
 
+      // Читаем лог из файла (скрипт пишет через tee в LOG_FILE)
+      let logContent = '';
+      try {
+        if (fs.existsSync(LOG_FILE)) {
+          logContent = fs.readFileSync(LOG_FILE, 'utf8');
+        }
+      } catch (readErr) {
+        console.error(`Ошибка чтения лог-файла: ${readErr.message}`);
+      }
+
       if (error) {
         console.error(`Ошибка выполнения скрипта: ${error.message}`);
         return res.status(500).json({
           error: `Ошибка выполнения скрипта: ${error.message}`,
-          log: stdout || stderr || 'Скрипт завершился с ошибкой без вывода.',
+          log: logContent || stdout || stderr || 'Скрипт завершился с ошибкой без вывода.',
         });
       }
 
-      // Возвращаем stdout текущего запуска скрипта как лог
+      // Возвращаем содержимое лог-файла
       res.json({
         success: true,
         domainsCount: parsedDomains.length,
-        log: stdout || 'Скрипт выполнен без вывода.',
+        log: logContent || stdout || 'Скрипт выполнен без вывода.',
       });
     });
   } catch (writeError) {
