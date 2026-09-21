@@ -50,13 +50,13 @@ while IFS= read -r domain; do
     [ -z "$domain" ] && continue
     
     # Получаем IP через dig
-    IPS=$(dig @"$DNS_SERVER" +short "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+    IPS=$(dig @"$DNS_SERVER" +short "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
     
     if [ -n "$IPS" ]; then
         while IFS= read -r ip; do
             [ -z "$ip" ] && continue
             # Проверяем, не добавляли ли уже этот IP
-            if ! echo "$ALL_IPS" | grep -q "^${ip}$"; then
+            if ! echo "$ALL_IPS" | grep -q "^${ip}$" 2>/dev/null; then
                 ALL_IPS="${ALL_IPS}${ip}\n"
             fi
         done <<< "$IPS"
@@ -68,8 +68,8 @@ while IFS= read -r domain; do
     fi
 done <<< "$DOMAINS"
 
-IP_COUNT=$(echo -e "$ALL_IPS" | grep -c '[0-9]')
-log "📊Resolved: $RESOLVED доменов, $IP_COUNT уникальных IP, Failed: $FAILED"
+IP_COUNT=$(echo -e "$ALL_IPS" | grep -c '[0-9]' || echo "0")
+log "📊 Resolved: $RESOLVED доменов, $IP_COUNT уникальных IP, Failed: $FAILED"
 
 if [ "$IP_COUNT" -eq 0 ]; then
     log "❌ Не удалось получить ни одного IP-адреса"
@@ -79,12 +79,12 @@ fi
 # Обновление маршрутов
 log "🔄 Обновление маршрутов через $INTERFACE..."
 
-echo -e "$ALL_IPS" | grep '[0-9]' | while IFS= read -r ip; do
+echo -e "$ALL_IPS" | grep '[0-9]' 2>/dev/null | while IFS= read -r ip; do
     [ -z "$ip" ] && continue
     ip route replace "$ip" dev "$INTERFACE" 2>/dev/null || \
     ip route add "$ip" dev "$INTERFACE" 2>/dev/null || \
     log "  ⚠️ Не удалось добавить маршрут для $ip"
-done
+done || true
 
 log "✅ Маршруты обновлены: $IP_COUNT IP через $INTERFACE"
 
