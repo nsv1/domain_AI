@@ -28,6 +28,7 @@ function App() {
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const logRef = useRef<HTMLPreElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Загрузка статуса и содержимого файла доменов при монтировании
   useEffect(() => {
@@ -61,6 +62,16 @@ function App() {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [log]);
+
+  // Автоподстройка высоты textarea под содержимое
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      // Минимум 384px (h-96), максимум — по содержимому
+      textareaRef.current.style.height = `${Math.max(384, scrollHeight)}px`;
+    }
+  }, [domains]);
 
   const fetchStatus = async () => {
     try {
@@ -185,10 +196,11 @@ function App() {
               </div>
               <div className="p-4">
                 <textarea
+                  ref={textareaRef}
                   value={domains}
                   onChange={(e) => setDomains(e.target.value)}
                   placeholder={`Введите список доменов, например:\n\n# ============================================\n# OpenAI (ChatGPT, DALL-E, GPT API)\n# ============================================\nopenai.com\nchat.openai.com\nchatgpt.com\napi.openai.com\n---`}
-                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
+                  className="w-full min-h-[384px] bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-sm font-mono text-green-300 placeholder-slate-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all overflow-auto"
                   spellCheck={false}
                 />
               </div>
