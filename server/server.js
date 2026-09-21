@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -48,22 +48,46 @@ app.post('/api/process', async (req, res) => {
     fs.writeFileSync(DOMAINS_FILE, domainsContent, 'utf8');
     console.log(`✅ Домены сохранены в ${DOMAINS_FILE} (${parsedDomains.length} шт.)`);
 
-    exec(`sudo ${SCRIPT_PATH}`, { timeout: 120000 }, (error, stdout, stderr) => {
-      // Логируем вывод скрипта в консоль сервера
-      if (stdout) console.log(stdout);
-      if (stderr) console.error(stderr);
+    // Используем spawn для получения вывода в реальном времени без буферизации
+    const child = spawn('sudo', [SCRIPT_PATH], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
 
-      if (error) {
-        console.error(`Ошибка выполнения скрипта: ${error.message}`);
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      console.log(chunk);
+    });
+
+    child.stderr.on('data', (data) => {
+      const chunk = data.toString();
+      stderr += chunk;
+      console.error(chunk);
+    });
+
+    // Таймаут 120 секунд
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      console.error('Скрипт завершён по таймауту (120 сек)');
+    }, 120000);
+
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+
+      if (code !== 0) {
+        console.error(`Скрипт завершился с кодом: ${code}`);
         
-        // Формируем лог с информацией об ошибке
-        let errorLog = `❌ Ошибка выполнения скрипта: ${error.message}\n\n`;
+        let errorLog = `❌ Скрипт завершился с кодом: ${code}\n\n`;
         if (stdout) errorLog += `=== STDOUT ===\n${stdout}\n`;
         if (stderr) errorLog += `=== STDERR ===\n${stderr}\n`;
         if (!stdout && !stderr) errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
         
         return res.status(500).json({
-          error: `Ошибка выполнения скрипта: ${error.message}`,
+          error: `Скрипт завершился с кодом: ${code}`,
           log: errorLog,
         });
       }
@@ -72,7 +96,7 @@ app.post('/api/process', async (req, res) => {
       if (!stdout || stdout.trim() === '') {
         const warningLog = stderr 
           ? `⚠️ STDOUT пуст, но есть STDERR:\n${stderr}`
-          : '⚠️ Скрипт выполнен успешно, но stdout пуст. Возможно, скрипт не выводит данные или возникла проблема с буферизацией вывода.';
+          : '⚠️ Скрипт выполнен успешно, но stdout пуст. Возможно, скрипт не выводит данные.';
         
         return res.json({
           success: true,
@@ -86,6 +110,15 @@ app.post('/api/process', async (req, res) => {
         success: true,
         domainsCount: parsedDomains.length,
         log: stdout,
+      });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timeout);
+      console.error(`Ошибка запуска скрипта: ${err.message}`);
+      return res.status(500).json({
+        error: `Ошибка запуска скрипта: ${err.message}`,
+        log: `❌ Ошибка запуска скрипта: ${err.message}`,
       });
     });
   } catch (writeError) {
