@@ -2,8 +2,6 @@
 # update-ai-router.sh
 # Скрипт обновления маршрутов для AI-доменов через AmneziaWG
 
-set -e
-
 DOMAINS_FILE="/etc/ai-domains.list"
 LOG_FILE="/var/log/ai-router.log"
 INTERFACE="awg0"
@@ -31,14 +29,14 @@ if [ ! -f "$DOMAINS_FILE" ]; then
 fi
 
 # Чтение доменов (игнорируем комментарии и пустые строки)
-DOMAINS=$(grep -v '^#' "$DOMAINS_FILE" | grep -v '^---' | grep -v '^[[:space:]]*$')
-DOMAIN_COUNT=$(echo "$DOMAINS" | wc -l)
-log "📋 Найдено доменов: $DOMAIN_COUNT"
-
-if [ "$DOMAIN_COUNT" -eq 0 ]; then
+DOMAINS=$(grep -v '^#' "$DOMAINS_FILE" | grep -v '^---' | grep -v '^[[:space:]]*$' || true)
+if [ -z "$DOMAINS" ]; then
     log "❌ Нет доменов для обработки"
     exit 1
 fi
+
+DOMAIN_COUNT=$(echo "$DOMAINS" | wc -l)
+log "📋 Найдено доменов: $DOMAIN_COUNT"
 
 # Резолвинг DNS для каждого домена
 log "🔍 Резолвинг DNS..."
@@ -68,7 +66,12 @@ while IFS= read -r domain; do
     fi
 done <<< "$DOMAINS"
 
-IP_COUNT=$(echo -e "$ALL_IPS" | grep -c '[0-9]' || echo "0")
+# Подсчёт уникальных IP
+IP_COUNT=0
+if [ -n "$ALL_IPS" ]; then
+    IP_COUNT=$(echo -e "$ALL_IPS" | grep -c '[0-9]' 2>/dev/null || echo "0")
+fi
+
 log "📊 Resolved: $RESOLVED доменов, $IP_COUNT уникальных IP, Failed: $FAILED"
 
 if [ "$IP_COUNT" -eq 0 ]; then
@@ -84,7 +87,7 @@ echo -e "$ALL_IPS" | grep '[0-9]' 2>/dev/null | while IFS= read -r ip; do
     ip route replace "$ip" dev "$INTERFACE" 2>/dev/null || \
     ip route add "$ip" dev "$INTERFACE" 2>/dev/null || \
     log "  ⚠️ Не удалось добавить маршрут для $ip"
-done || true
+done
 
 log "✅ Маршруты обновлены: $IP_COUNT IP через $INTERFACE"
 
