@@ -24,7 +24,7 @@ platform.openai.com
 function App() {
   const [domains, setDomains] = useState<string>('');
   const [log, setLog] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState<number>(0); // 0 = idle, 1-5 = active step, 6 = all done
+  const [currentStep, setCurrentStep] = useState<number>(0); // 0 = idle, 1-4 = active step, 5 = all done
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -102,7 +102,6 @@ function App() {
       stepTimers.push(setTimeout(() => setCurrentStep(2), 500));    // Запуск скрипта
       stepTimers.push(setTimeout(() => setCurrentStep(3), 2000));   // Резолвинг DNS
       stepTimers.push(setTimeout(() => setCurrentStep(4), 4000));   // Обновление маршрутов
-      stepTimers.push(setTimeout(() => setCurrentStep(5), 5500));   // Перезагрузка dnsmasq
     };
 
     const clearSteps = () => {
@@ -136,7 +135,7 @@ function App() {
       setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
     } finally {
       clearSteps();
-      setCurrentStep(6); // Все этапы завершены
+      setCurrentStep(5); // Все этапы завершены
       // Через 2 секунды сбрасываем в idle
       setTimeout(() => setCurrentStep(0), 2000);
     }
@@ -244,14 +243,14 @@ function App() {
               <div className="px-4 py-3 border-t border-slate-700/50 flex items-center gap-3">
                 <button
                   onClick={handleProcess}
-                  disabled={(currentStep > 0 && currentStep < 6) || !domains.trim()}
+                  disabled={(currentStep > 0 && currentStep < 5) || !domains.trim()}
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
-                    (currentStep > 0 && currentStep < 6)
+                    (currentStep > 0 && currentStep < 5)
                       ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
                   }`}
                 >
-                  {(currentStep > 0 && currentStep < 6) ? (
+                  {(currentStep > 0 && currentStep < 5) ? (
                     <>
                       <i className="fas fa-spinner fa-spin"></i>
                       Обработка...
@@ -265,7 +264,7 @@ function App() {
                 </button>
                 <button
                   onClick={handleClear}
-                  disabled={currentStep > 0 && currentStep < 6}
+                  disabled={currentStep > 0 && currentStep < 5}
                   className="px-4 py-3 rounded-lg font-semibold text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all border border-slate-600/30"
                 >
                   <i className="fas fa-trash-alt"></i>
@@ -354,31 +353,25 @@ function App() {
                   step={1}
                   title="Сохранение доменов"
                   description="/etc/ai-domains.list"
-                  status={currentStep === 6 || currentStep > 1 ? 'done' : currentStep === 1 ? 'active' : 'idle'}
+                  status={currentStep === 5 || currentStep > 1 ? 'done' : currentStep === 1 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={2}
                   title="Запуск скрипта"
                   description="sudo /usr/local/bin/update-ai-router.sh"
-                  status={currentStep === 6 || currentStep > 2 ? 'done' : currentStep === 2 ? 'active' : 'idle'}
+                  status={currentStep === 5 || currentStep > 2 ? 'done' : currentStep === 2 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={3}
                   title="Резолвинг DNS"
-                  description="dig @127.0.0.1 +short"
-                  status={currentStep === 6 || currentStep > 3 ? 'done' : currentStep === 3 ? 'active' : 'idle'}
+                  description="dig @1.1.1.1 / @8.8.8.8 +short"
+                  status={currentStep === 5 || currentStep > 3 ? 'done' : currentStep === 3 ? 'active' : 'idle'}
                 />
                 <ProcessStep
                   step={4}
                   title="Обновление маршрутов"
                   description="ip route replace ... dev awg0"
-                  status={currentStep === 6 || currentStep > 4 ? 'done' : currentStep === 4 ? 'active' : 'idle'}
-                />
-                <ProcessStep
-                  step={5}
-                  title="Перезагрузка dnsmasq"
-                  description="systemctl reload dnsmasq"
-                  status={currentStep === 6 || currentStep > 5 ? 'done' : currentStep === 5 ? 'active' : 'idle'}
+                  status={currentStep === 5 || currentStep > 4 ? 'done' : currentStep === 4 ? 'active' : 'idle'}
                 />
               </div>
             </div>
@@ -390,7 +383,7 @@ function App() {
       <footer className="border-t border-slate-700/30 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-500">
           <span>AI Router Manager v1.0</span>
-          <span>AmneziaWG + dnsmasq + BGP</span>
+          <span>AmneziaWG + BGP (Cloudflare/Google DNS)</span>
         </div>
       </footer>
     </div>

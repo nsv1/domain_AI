@@ -16,6 +16,10 @@ cd server
 npm install
 cd ..
 
+echo "📋 Обновление скрипта маршрутизации..."
+sudo cp scripts/update-ai-router.sh /usr/local/bin/update-ai-router.sh
+sudo chmod +x /usr/local/bin/update-ai-router.sh
+
 echo "🔄 Перезапуск сервиса..."
 sudo systemctl restart ai-router-manager
 
