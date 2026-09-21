@@ -53,29 +53,39 @@ app.post('/api/process', async (req, res) => {
       if (stdout) console.log(stdout);
       if (stderr) console.error(stderr);
 
-      // Читаем лог из файла (скрипт пишет через tee в LOG_FILE)
-      let logContent = '';
-      try {
-        if (fs.existsSync(LOG_FILE)) {
-          logContent = fs.readFileSync(LOG_FILE, 'utf8');
-        }
-      } catch (readErr) {
-        console.error(`Ошибка чтения лог-файла: ${readErr.message}`);
-      }
-
       if (error) {
         console.error(`Ошибка выполнения скрипта: ${error.message}`);
+        
+        // Формируем лог с информацией об ошибке
+        let errorLog = `❌ Ошибка выполнения скрипта: ${error.message}\n\n`;
+        if (stdout) errorLog += `=== STDOUT ===\n${stdout}\n`;
+        if (stderr) errorLog += `=== STDERR ===\n${stderr}\n`;
+        if (!stdout && !stderr) errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
+        
         return res.status(500).json({
           error: `Ошибка выполнения скрипта: ${error.message}`,
-          log: logContent || stdout || stderr || 'Скрипт завершился с ошибкой без вывода.',
+          log: errorLog,
         });
       }
 
-      // Возвращаем содержимое лог-файла
+      // Проверяем stdout на пустоту
+      if (!stdout || stdout.trim() === '') {
+        const warningLog = stderr 
+          ? `⚠️ STDOUT пуст, но есть STDERR:\n${stderr}`
+          : '⚠️ Скрипт выполнен успешно, но stdout пуст. Возможно, скрипт не выводит данные или возникла проблема с буферизацией вывода.';
+        
+        return res.json({
+          success: true,
+          domainsCount: parsedDomains.length,
+          log: warningLog,
+        });
+      }
+
+      // Возвращаем stdout
       res.json({
         success: true,
         domainsCount: parsedDomains.length,
-        log: logContent || stdout || 'Скрипт выполнен без вывода.',
+        log: stdout,
       });
     });
   } catch (writeError) {
