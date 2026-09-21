@@ -10,11 +10,15 @@ INTERFACE="awg0"
 DNS_SERVER="127.0.0.1"
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$msg"
+    echo "$msg" >> "$LOG_FILE"
 }
 
 separator() {
-    echo "==================================================" | tee -a "$LOG_FILE"
+    local sep="=================================================="
+    echo "$sep"
+    echo "$sep" >> "$LOG_FILE"
 }
 
 separator

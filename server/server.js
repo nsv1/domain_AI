@@ -48,25 +48,25 @@ app.post('/api/process', async (req, res) => {
     fs.writeFileSync(DOMAINS_FILE, domainsContent, 'utf8');
     console.log(`✅ Домены сохранены в ${DOMAINS_FILE} (${parsedDomains.length} шт.)`);
 
-    // Используем spawn для получения вывода в реальном времени без буферизации
-    const child = spawn('sudo', [SCRIPT_PATH], {
+    // Используем spawn с shell: true для лучшей совместимости с sudo и tee
+    const child = spawn(`sudo ${SCRIPT_PATH} 2>&1`, {
       env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true
     });
 
-    let stdout = '';
-    let stderr = '';
+    let output = '';
 
     child.stdout.on('data', (data) => {
       const chunk = data.toString();
-      stdout += chunk;
-      console.log(chunk);
+      output += chunk;
+      process.stdout.write('[OUT] ' + chunk);
     });
 
     child.stderr.on('data', (data) => {
       const chunk = data.toString();
-      stderr += chunk;
-      console.error(chunk);
+      output += chunk;
+      process.stderr.write('[ERR] ' + chunk);
     });
 
     // Таймаут 120 секунд
@@ -82,9 +82,8 @@ app.post('/api/process', async (req, res) => {
         console.error(`Скрипт завершился с кодом: ${code}`);
         
         let errorLog = `❌ Скрипт завершился с кодом: ${code}\n\n`;
-        if (stdout) errorLog += `=== STDOUT ===\n${stdout}\n`;
-        if (stderr) errorLog += `=== STDERR ===\n${stderr}\n`;
-        if (!stdout && !stderr) errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
+        if (output) errorLog += output;
+        else errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
         
         return res.status(500).json({
           error: `Скрипт завершился с кодом: ${code}`,
@@ -92,11 +91,9 @@ app.post('/api/process', async (req, res) => {
         });
       }
 
-      // Проверяем stdout на пустоту
-      if (!stdout || stdout.trim() === '') {
-        const warningLog = stderr 
-          ? `⚠️ STDOUT пуст, но есть STDERR:\n${stderr}`
-          : '⚠️ Скрипт выполнен успешно, но stdout пуст. Возможно, скрипт не выводит данные.';
+      // Проверяем output на пустоту
+      if (!output || output.trim() === '') {
+        const warningLog = '⚠️ Скрипт выполнен успешно, но вывод пуст. Возможно, скрипт не выводит данные или возникла проблема с буферизацией.';
         
         return res.json({
           success: true,
@@ -105,11 +102,11 @@ app.post('/api/process', async (req, res) => {
         });
       }
 
-      // Возвращаем stdout
+      // Возвращаем комбинированный вывод
       res.json({
         success: true,
         domainsCount: parsedDomains.length,
-        log: stdout,
+        log: output,
       });
     });
 
@@ -118,7 +115,7 @@ app.post('/api/process', async (req, res) => {
       console.error(`Ошибка запуска скрипта: ${err.message}`);
       return res.status(500).json({
         error: `Ошибка запуска скрипта: ${err.message}`,
-        log: `❌ Ошибка запуска скрипта: ${err.message}`,
+        log: `❌ Ошибка запуска скрипта: ${err.message}\n\n${output || 'Вывод отсутствует.'}`,
       });
     });
   } catch (writeError) {
