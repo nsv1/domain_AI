@@ -195,6 +195,38 @@ function App() {
     }
   };
 
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+    setError('');
+    setSuccess('');
+    setLog('🔄 Запуск обновления приложения...\n\n');
+
+    try {
+      const response = await fetch(`${API_URL}/api/update`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Ошибка при выполнении обновления');
+        if (data.log) {
+          setLog(prev => prev + data.log);
+        }
+      } else {
+        setLog(prev => prev + data.log);
+        if (data.success) {
+          setSuccess('✅ Обновление завершено успешно');
+        } else {
+          setSuccess(`⚠️ Обновление завершено с кодом: ${data.exitCode}`);
+        }
+      }
+    } catch (e: any) {
+      setError(`Ошибка подключения к серверу: ${e.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const domainCount = domains
     .split('\n')
     .map(l => l.trim())
@@ -461,6 +493,18 @@ function App() {
                 <li className="flex items-start gap-2">
                   <i className="fas fa-stethoscope text-emerald-400 mt-0.5"></i>
                   <span>Диагностика: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/check-vm-awg.sh</code> — проверяет сервисы, BGP, туннель, маршруты, DNS, HTTP-доступность</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-sync-alt text-cyan-400 mt-0.5"></i>
+                  <span>Обновление: </span>
+                  <button
+                    onClick={handleUpdate}
+                    disabled={isUpdating}
+                    className={`text-blue-400 hover:text-blue-300 underline transition-colors ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Запустить обновление приложения из GitHub"
+                  >
+                    {isUpdating ? 'Обновление...' : './update.sh'}
+                  </button>
                 </li>
                 <li className="flex items-start gap-2 pt-1 border-t border-slate-700/30 mt-1">
                   <i className="fas fa-book text-amber-400 mt-0.5"></i>
