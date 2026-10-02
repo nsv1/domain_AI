@@ -246,8 +246,13 @@ app.get('/api/update', (req, res) => {
     });
   }
 
+  const projectDir = path.join(__dirname, '..');
   const child = spawn(`bash ${UPDATE_SCRIPT} 2>&1`, {
-    env: { ...process.env },
+    env: { 
+      ...process.env,
+      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
+    },
+    cwd: projectDir,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: true
   });
