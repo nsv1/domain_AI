@@ -205,13 +205,47 @@ function App() {
 
     try {
       const response = await fetch(`${API_URL}/api/update`);
-      const data = await response.json();
+      const text = await response.text();
+
+      // Если вместо JSON пришли HTML-страницы nginx (502/504) — показываем понятную ошибку
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (response.status === 502 || response.status === 504) {
+          setError('Сервер недоступен (обновление перезапустило сервис). Это нормально — обновите страницу через 30–60 секунд.');
+          setLog(prev => prev + '🔄 Идёт обновление и перезапуск сервиса. Обновите страницу браузера через 30–60 секунд.\n');
+        } else if (text.includes('nginx') || text.trimStart().startsWith('<')) {
+          // Ответ от nginx, а не от приложения: скорее всего таймаут проксирования
+          setError(`Nginx вернул ошибку ${response.status}. Увеличьте proxy_read_timeout/proxy_send_timeout до 300s в конфиге /etc/nginx/sites-available/ai-router (см. update.md).`);
+        } else {
+          setError(`Сервер вернул некорректный ответ (${response.status}). Ответ: ${text.slice(0, 200)}`);
+        }
+        return;
+      }
 
       if (!response.ok) {
         setError(data.error || 'Ошибка при выполнении обновления');
         if (data.log) {
           setLog(prev => prev + data.log);
         }
+      } else if (data.started) {
+        // Обновление запущено в фоне — подгружаем его лог с задержкой
+        setLog(prev => prev + data.log);
+        setSuccess('🔄 Обновление запущено в фоне. Дождитесь окончания и обновите страницу.');
+        setTimeout(async () => {
+          try {
+            const logResp = await fetch(`${API_URL}/api/update-log`);
+            if (logResp.ok) {
+              const logData = await logResp.json();
+              if (logData.log) {
+                setLog(prev => prev + '\n📄 Лог обновления:\n' + logData.log);
+              }
+            }
+          } catch {
+            // Сервис мог быть перезапущен — это ожидаемо
+          }
+        }, 45000);
       } else {
         setLog(prev => prev + data.log);
         if (data.success) {
@@ -221,7 +255,7 @@ function App() {
         }
       }
     } catch (e: any) {
-      setError(`Ошибка подключения к серверу: ${e.message}`);
+      setError(`Ошибка подключения к серверу: ${e.message}. Возможно, идёт обновление — обновите страницу через 30–60 секунд.`);
     } finally {
       setIsUpdating(false);
     }
