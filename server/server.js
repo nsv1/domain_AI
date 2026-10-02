@@ -247,29 +247,25 @@ app.get('/api/update', (req, res) => {
   }
 
   const projectDir = path.join(__dirname, '..');
-  const child = spawn(`bash ${UPDATE_SCRIPT} 2>&1`, {
+  const child = spawn('bash', [UPDATE_SCRIPT], {
     env: { 
       ...process.env,
       PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
     },
     cwd: projectDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true
+    stdio: ['ignore', 'pipe', 'pipe']
   });
 
   let output = '';
 
-  child.stdout.on('data', (data) => {
+  const handleData = (data) => {
     const chunk = data.toString();
     output += chunk;
-    process.stdout.write('[UPDATE OUT] ' + chunk);
-  });
+    process.stdout.write('[UPDATE] ' + chunk);
+  };
 
-  child.stderr.on('data', (data) => {
-    const chunk = data.toString();
-    output += chunk;
-    process.stderr.write('[UPDATE ERR] ' + chunk);
-  });
+  child.stdout.on('data', handleData);
+  child.stderr.on('data', handleData);
 
   const timeout = setTimeout(() => {
     child.kill('SIGTERM');

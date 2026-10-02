@@ -1,9 +1,12 @@
 #!/bin/bash
 set -e
-cd /opt/ai-router-manager
+
+# Определяем директорию скрипта (абсолютный путь)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # Добавляем локальные бинарники в PATH
-export PATH="$PWD/node_modules/.bin:$PATH"
+export PATH="$SCRIPT_DIR/node_modules/.bin:$PATH"
 
 echo "📥 Получение изменений..."
 git pull origin main
@@ -16,7 +19,7 @@ else
 fi
 
 echo "🔨 Сборка фронтенда..."
-npm run build
+"$SCRIPT_DIR/node_modules/.bin/vite" build
 
 echo "📦 Установка зависимостей бэкенда..."
 cd server
