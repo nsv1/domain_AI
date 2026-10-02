@@ -6,14 +6,22 @@ echo "📥 Получение изменений..."
 git pull origin main
 
 echo "📦 Установка зависимостей фронтенда..."
-npm install
+if [ ! -d "node_modules" ]; then
+  npm install
+else
+  npm ci
+fi
 
 echo "🔨 Сборка фронтенда..."
-npm run build
+npx vite build
 
 echo "📦 Установка зависимостей бэкенда..."
 cd server
-npm install
+if [ ! -d "node_modules" ]; then
+  npm install
+else
+  npm ci
+fi
 cd ..
 
 echo "📋 Обновление скрипта маршрутизации..."
