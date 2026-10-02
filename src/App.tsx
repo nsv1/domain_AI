@@ -151,6 +151,8 @@ function App() {
   };
 
   const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalContent, setModalContent] = useState<string>('');
 
   const handleDiagnose = async () => {
     setIsDiagnosing(true);
@@ -179,6 +181,17 @@ function App() {
       setError(`Ошибка подключения к серверу: ${e.message}`);
     } finally {
       setIsDiagnosing(false);
+    }
+  };
+
+  const handleShowUpdateGuide = async () => {
+    try {
+      const response = await fetch('/update.md');
+      const content = await response.text();
+      setModalContent(content);
+      setShowModal(true);
+    } catch (e: any) {
+      setError(`Не удалось загрузить инструкцию: ${e.message}`);
     }
   };
 
@@ -353,32 +366,6 @@ function App() {
                 />
               </div>
             </div>
-
-            {/* Info Panel */}
-            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
-                <i className="fas fa-info-circle text-blue-400"></i>
-                Информация
-              </h3>
-              <ul className="text-xs text-slate-400 space-y-1.5">
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Домены сохраняются в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-stethoscope text-emerald-400 mt-0.5"></i>
-                  <span>Диагностика: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/check-vm-awg.sh</code> — проверяет сервисы, BGP, туннель, маршруты, DNS, HTTP-доступность</span>
-                </li>
-              </ul>
-            </div>
           </div>
 
           {/* Right Column - Log Output */}
@@ -451,6 +438,42 @@ function App() {
                 </button>
               </div>
             </div>
+
+            {/* Info Panel */}
+            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                <i className="fas fa-info-circle text-blue-400"></i>
+                Информация
+              </h3>
+              <ul className="text-xs text-slate-400 space-y-1.5">
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Домены сохраняются в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-stethoscope text-emerald-400 mt-0.5"></i>
+                  <span>Диагностика: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/check-vm-awg.sh</code> — проверяет сервисы, BGP, туннель, маршруты, DNS, HTTP-доступность</span>
+                </li>
+                <li className="flex items-start gap-2 pt-1 border-t border-slate-700/30 mt-1">
+                  <i className="fas fa-book text-amber-400 mt-0.5"></i>
+                  <button
+                    onClick={handleShowUpdateGuide}
+                    className="text-blue-400 hover:text-blue-300 underline transition-colors"
+                    title="Открыть инструкцию по развертыванию"
+                  >
+                    Инструкция по развертыванию (update.md)
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </main>
@@ -461,6 +484,40 @@ function App() {
         <span>AI Router Manager v1.0</span>
         <span>AmneziaWG + FRR/BGP (5 DNS servers)</span>        </div>
       </footer>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <i className="fas fa-book text-amber-400"></i>
+                Инструкция по развертыванию
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Закрыть"
+              >
+                <i className="fas fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="p-6 overflow-auto flex-1">
+              <pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                {modalContent}
+              </pre>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-700 flex justify-end">
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 rounded-lg font-semibold text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-all"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
