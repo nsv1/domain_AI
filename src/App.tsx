@@ -24,7 +24,7 @@ platform.openai.com
 function App() {
   const [domains, setDomains] = useState<string>('');
   const [log, setLog] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState<number>(0); // 0 = idle, 1-4 = active step, 5 = all done
+  const [currentStep, setCurrentStep] = useState<number>(0); // 0 = idle, 1-6 = active step, 7 = all done
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
@@ -101,7 +101,9 @@ function App() {
       stepTimers.push(setTimeout(() => setCurrentStep(1), 0));      // Сохранение доменов
       stepTimers.push(setTimeout(() => setCurrentStep(2), 500));    // Запуск скрипта
       stepTimers.push(setTimeout(() => setCurrentStep(3), 2000));   // Резолвинг DNS
-      stepTimers.push(setTimeout(() => setCurrentStep(4), 4000));   // Обновление маршрутов
+      stepTimers.push(setTimeout(() => setCurrentStep(4), 4000));   // Очистка старых маршрутов
+      stepTimers.push(setTimeout(() => setCurrentStep(5), 5000));   // Добавление новых маршрутов
+      stepTimers.push(setTimeout(() => setCurrentStep(6), 6000));   // Обновление FRR prefix-list
     };
 
     const clearSteps = () => {
@@ -135,7 +137,7 @@ function App() {
       setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
     } finally {
       clearSteps();
-      setCurrentStep(5); // Все этапы завершены
+      setCurrentStep(7); // Все этапы завершены
       // Через 2 секунды сбрасываем в idle
       setTimeout(() => setCurrentStep(0), 2000);
     }
@@ -146,6 +148,38 @@ function App() {
     setLog('');
     setError('');
     setSuccess('');
+  };
+
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const handleDiagnose = async () => {
+    setIsDiagnosing(true);
+    setError('');
+    setSuccess('');
+    setLog('🔍 Запуск диагностики системы...\n\n');
+
+    try {
+      const response = await fetch(`${API_URL}/api/diagnose`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Ошибка при выполнении диагностики');
+        if (data.log) {
+          setLog(prev => prev + data.log);
+        }
+      } else {
+        setLog(prev => prev + data.log);
+        if (data.success) {
+          setSuccess('✅ Диагностика завершена успешно');
+        } else {
+          setSuccess(`⚠️ Диагностика завершена с кодом: ${data.exitCode}`);
+        }
+      }
+    } catch (e: any) {
+      setError(`Ошибка подключения к серверу: ${e.message}`);
+    } finally {
+      setIsDiagnosing(false);
+    }
   };
 
   const domainCount = domains
@@ -243,14 +277,15 @@ function App() {
               <div className="px-4 py-3 border-t border-slate-700/50 flex items-center gap-3">
                 <button
                   onClick={handleProcess}
-                  disabled={(currentStep > 0 && currentStep < 5) || !domains.trim()}
+                  disabled={(currentStep > 0 && currentStep < 7) || !domains.trim()}
+                  title="Сохранить домены в /etc/ai-domains.list и запустить скрипт обновления маршрутов"
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
-                    (currentStep > 0 && currentStep < 5)
+                    (currentStep > 0 && currentStep < 7)
                       ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
                   }`}
                 >
-                  {(currentStep > 0 && currentStep < 5) ? (
+                  {(currentStep > 0 && currentStep < 7) ? (
                     <>
                       <i className="fas fa-spinner fa-spin"></i>
                       Обработка...
@@ -264,11 +299,58 @@ function App() {
                 </button>
                 <button
                   onClick={handleClear}
-                  disabled={currentStep > 0 && currentStep < 5}
+                  disabled={currentStep > 0 && currentStep < 7}
+                  title="Очистить все поля: домены, лог, ошибки"
                   className="px-4 py-3 rounded-lg font-semibold text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all border border-slate-600/30"
                 >
                   <i className="fas fa-trash-alt"></i>
                 </button>
+              </div>
+            </div>
+
+            {/* Process Steps */}
+            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                <i className="fas fa-list-ol text-purple-400"></i>
+                Этапы обработки
+              </h3>
+              <div className="space-y-2">
+                <ProcessStep
+                  step={1}
+                  title="Сохранение доменов"
+                  description="/etc/ai-domains.list"
+                  status={currentStep === 7 || currentStep > 1 ? 'done' : currentStep === 1 ? 'active' : 'idle'}
+                />
+                <ProcessStep
+                  step={2}
+                  title="Запуск скрипта"
+                  description="sudo /usr/local/bin/update-ai-router.sh"
+                  status={currentStep === 7 || currentStep > 2 ? 'done' : currentStep === 2 ? 'active' : 'idle'}
+                />
+                <ProcessStep
+                  step={3}
+                  title="Резолвинг DNS"
+                  description="dig @1.1.1.1/8.8.8.8/9.9.9.9 +short (5 DNS)"
+                  status={currentStep === 7 || currentStep > 3 ? 'done' : currentStep === 3 ? 'active' : 'idle'}
+                />
+                <ProcessStep
+                  step={4}
+                  title="Очистка старых маршрутов"
+                  description="ip route del ... dev awg0"
+                  status={currentStep === 7 || currentStep > 4 ? 'done' : currentStep === 4 ? 'active' : 'idle'}
+                />
+                <ProcessStep
+                  step={5}
+                  title="Добавление маршрутов"
+                  description="ip route replace ... dev awg0"
+                  status={currentStep === 7 || currentStep > 5 ? 'done' : currentStep === 5 ? 'active' : 'idle'}
+                />
+                <ProcessStep
+                  step={6}
+                  title="Обновление FRR"
+                  description="vtysh → prefix-list AI-NETWORKS + BGP"
+                  status={currentStep === 7 || currentStep > 6 ? 'done' : currentStep === 6 ? 'active' : 'idle'}
+                />
               </div>
             </div>
 
@@ -287,10 +369,13 @@ function App() {
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
                 </li>
-
                 <li className="flex items-start gap-2">
                   <i className="fas fa-check text-green-400 mt-0.5"></i>
                   <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-stethoscope text-emerald-400 mt-0.5"></i>
+                  <span>Диагностика: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/check-vm-awg.sh</code> — проверяет сервисы, BGP, туннель, маршруты, DNS, HTTP-доступность</span>
                 </li>
               </ul>
             </div>
@@ -322,6 +407,7 @@ function App() {
                 {log && (
                   <button
                     onClick={() => setLog('')}
+                    title="Очистить содержимое окна лога"
                     className="text-xs text-slate-400 hover:text-white transition-colors"
                   >
                     <i className="fas fa-times"></i> Очистить
@@ -340,39 +426,29 @@ function App() {
                   )}
                 </pre>
               </div>
-            </div>
-
-            {/* Process Steps */}
-            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <i className="fas fa-list-ol text-purple-400"></i>
-                Этапы обработки
-              </h3>
-              <div className="space-y-2">
-                <ProcessStep
-                  step={1}
-                  title="Сохранение доменов"
-                  description="/etc/ai-domains.list"
-                  status={currentStep === 5 || currentStep > 1 ? 'done' : currentStep === 1 ? 'active' : 'idle'}
-                />
-                <ProcessStep
-                  step={2}
-                  title="Запуск скрипта"
-                  description="sudo /usr/local/bin/update-ai-router.sh"
-                  status={currentStep === 5 || currentStep > 2 ? 'done' : currentStep === 2 ? 'active' : 'idle'}
-                />
-                <ProcessStep
-                  step={3}
-                  title="Резолвинг DNS"
-                  description="dig @1.1.1.1 / @8.8.8.8 +short"
-                  status={currentStep === 5 || currentStep > 3 ? 'done' : currentStep === 3 ? 'active' : 'idle'}
-                />
-                <ProcessStep
-                  step={4}
-                  title="Обновление маршрутов"
-                  description="ip route replace ... dev awg0"
-                  status={currentStep === 5 || currentStep > 4 ? 'done' : currentStep === 4 ? 'active' : 'idle'}
-                />
+              <div className="px-4 py-3 border-t border-slate-700/50">
+                <button
+                  onClick={handleDiagnose}
+                  disabled={isDiagnosing}
+                  title="Запустить полную диагностику системы: сервисы, BGP, туннель, маршруты, DNS, HTTP"
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
+                    isDiagnosing
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40'
+                  }`}
+                >
+                  {isDiagnosing ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i>
+                      Диагностика...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-stethoscope"></i>
+                      Диагностика
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -382,9 +458,8 @@ function App() {
       {/* Footer */}
       <footer className="border-t border-slate-700/30 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between text-xs text-slate-500">
-          <span>AI Router Manager v1.0</span>
-          <span>AmneziaWG + BGP (Cloudflare/Google DNS)</span>
-        </div>
+        <span>AI Router Manager v1.0</span>
+        <span>AmneziaWG + FRR/BGP (5 DNS servers)</span>        </div>
       </footer>
     </div>
   );
