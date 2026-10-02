@@ -2,6 +2,9 @@
 set -e
 cd /opt/ai-router-manager
 
+# Добавляем локальные бинарники в PATH
+export PATH="$PWD/node_modules/.bin:$PATH"
+
 echo "📥 Получение изменений..."
 git pull origin main
 
@@ -13,7 +16,7 @@ else
 fi
 
 echo "🔨 Сборка фронтенда..."
-npx vite build
+npm run build
 
 echo "📦 Установка зависимостей бэкенда..."
 cd server
