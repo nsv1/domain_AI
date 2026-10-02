@@ -172,6 +172,69 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// API: Диагностика системы
+app.get('/api/diagnose', (req, res) => {
+  const DIAGNOSTIC_SCRIPT = '/usr/local/bin/check-vm-awg.sh';
+  
+  if (!fs.existsSync(DIAGNOSTIC_SCRIPT)) {
+    return res.status(404).json({
+      error: 'Скрипт диагностики не найден',
+      log: `❌ Скрипт ${DIAGNOSTIC_SCRIPT} не существует`,
+    });
+  }
+
+  const child = spawn(`sudo ${DIAGNOSTIC_SCRIPT} 2>&1`, {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: true
+  });
+
+  let output = '';
+
+  child.stdout.on('data', (data) => {
+    const chunk = data.toString();
+    output += chunk;
+    process.stdout.write('[DIAG OUT] ' + chunk);
+  });
+
+  child.stderr.on('data', (data) => {
+    const chunk = data.toString();
+    output += chunk;
+    process.stderr.write('[DIAG ERR] ' + chunk);
+  });
+
+  const timeout = setTimeout(() => {
+    child.kill('SIGTERM');
+    console.error('Диагностика завершена по таймауту (60 сек)');
+  }, 60000);
+
+  child.on('close', (code) => {
+    clearTimeout(timeout);
+    
+    if (code !== 0 && !output) {
+      return res.status(500).json({
+        error: `Диагностика завершилась с кодом: ${code}`,
+        log: `❌ Диагностика завершилась с кодом: ${code}\nВывод отсутствует.`,
+      });
+    }
+
+    res.json({
+      success: code === 0,
+      exitCode: code,
+      log: output || 'Диагностика выполнена без вывода.',
+    });
+  });
+
+  child.on('error', (err) => {
+    clearTimeout(timeout);
+    console.error(`Ошибка запуска диагностики: ${err.message}`);
+    return res.status(500).json({
+      error: `Ошибка запуска диагностики: ${err.message}`,
+      log: `❌ Ошибка запуска: ${err.message}`,
+    });
+  });
+});
+
 // Раздача статики (фронтенд из ../dist/)
 const staticDir = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(staticDir)) {

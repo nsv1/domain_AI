@@ -150,6 +150,38 @@ function App() {
     setSuccess('');
   };
 
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const handleDiagnose = async () => {
+    setIsDiagnosing(true);
+    setError('');
+    setSuccess('');
+    setLog('🔍 Запуск диагностики системы...\n\n');
+
+    try {
+      const response = await fetch(`${API_URL}/api/diagnose`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Ошибка при выполнении диагностики');
+        if (data.log) {
+          setLog(prev => prev + data.log);
+        }
+      } else {
+        setLog(prev => prev + data.log);
+        if (data.success) {
+          setSuccess('✅ Диагностика завершена успешно');
+        } else {
+          setSuccess(`⚠️ Диагностика завершена с кодом: ${data.exitCode}`);
+        }
+      }
+    } catch (e: any) {
+      setError(`Ошибка подключения к серверу: ${e.message}`);
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
+
   const domainCount = domains
     .split('\n')
     .map(l => l.trim())
@@ -246,6 +278,7 @@ function App() {
                 <button
                   onClick={handleProcess}
                   disabled={(currentStep > 0 && currentStep < 7) || !domains.trim()}
+                  title="Сохранить домены в /etc/ai-domains.list и запустить скрипт обновления маршрутов"
                   className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
                     (currentStep > 0 && currentStep < 7)
                       ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
@@ -267,80 +300,11 @@ function App() {
                 <button
                   onClick={handleClear}
                   disabled={currentStep > 0 && currentStep < 7}
+                  title="Очистить все поля: домены, лог, ошибки"
                   className="px-4 py-3 rounded-lg font-semibold text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 hover:text-white transition-all border border-slate-600/30"
                 >
                   <i className="fas fa-trash-alt"></i>
                 </button>
-              </div>
-            </div>
-
-            {/* Info Panel */}
-            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
-                <i className="fas fa-info-circle text-blue-400"></i>
-                Информация
-              </h3>
-              <ul className="text-xs text-slate-400 space-y-1.5">
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Домены сохраняются в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
-                </li>
-
-                <li className="flex items-start gap-2">
-                  <i className="fas fa-check text-green-400 mt-0.5"></i>
-                  <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Right Column - Log Output */}
-          <div className="space-y-4">
-            {/* Messages */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
-                <i className="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
-                <p className="text-sm text-red-300">{error}</p>
-              </div>
-            )}
-            {success && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-start gap-3">
-                <i className="fas fa-check-circle text-green-400 mt-0.5"></i>
-                <p className="text-sm text-green-300">{success}</p>
-              </div>
-            )}
-
-            {/* Log Panel */}
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-terminal text-green-400"></i>
-                  <h2 className="font-semibold text-white">Лог</h2>
-                </div>
-                {log && (
-                  <button
-                    onClick={() => setLog('')}
-                    className="text-xs text-slate-400 hover:text-white transition-colors"
-                  >
-                    <i className="fas fa-times"></i> Очистить
-                  </button>
-                )}
-              </div>
-              <div className="p-4">
-                <pre
-                  ref={logRef}
-                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap break-all"
-                >
-                  {log || (
-                    <span className="text-slate-500 italic">
-                      Здесь будет отображаться лог выполнения скрипта...
-                    </span>
-                  )}
-                </pre>
               </div>
             </div>
 
@@ -387,6 +351,104 @@ function App() {
                   description="vtysh → prefix-list AI-NETWORKS + BGP"
                   status={currentStep === 7 || currentStep > 6 ? 'done' : currentStep === 6 ? 'active' : 'idle'}
                 />
+              </div>
+            </div>
+
+            {/* Info Panel */}
+            <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-slate-300 mb-2 flex items-center gap-2">
+                <i className="fas fa-info-circle text-blue-400"></i>
+                Информация
+              </h3>
+              <ul className="text-xs text-slate-400 space-y-1.5">
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Домены сохраняются в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/etc/ai-domains.list</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Запускается скрипт <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/update-ai-router.sh</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-check text-green-400 mt-0.5"></i>
+                  <span>Результат записывается в <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/var/log/ai-router.log</code></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <i className="fas fa-stethoscope text-emerald-400 mt-0.5"></i>
+                  <span>Диагностика: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">sudo /usr/local/bin/check-vm-awg.sh</code> — проверяет сервисы, BGP, туннель, маршруты, DNS, HTTP-доступность</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Right Column - Log Output */}
+          <div className="space-y-4">
+            {/* Messages */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
+                <i className="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
+            )}
+            {success && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-start gap-3">
+                <i className="fas fa-check-circle text-green-400 mt-0.5"></i>
+                <p className="text-sm text-green-300">{success}</p>
+              </div>
+            )}
+
+            {/* Log Panel */}
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <i className="fas fa-terminal text-green-400"></i>
+                  <h2 className="font-semibold text-white">Лог</h2>
+                </div>
+                {log && (
+                  <button
+                    onClick={() => setLog('')}
+                    title="Очистить содержимое окна лога"
+                    className="text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <i className="fas fa-times"></i> Очистить
+                  </button>
+                )}
+              </div>
+              <div className="p-4">
+                <pre
+                  ref={logRef}
+                  className="w-full h-96 bg-slate-900/80 border border-slate-600/50 rounded-lg p-4 text-xs font-mono text-slate-300 overflow-auto whitespace-pre-wrap break-all"
+                >
+                  {log || (
+                    <span className="text-slate-500 italic">
+                      Здесь будет отображаться лог выполнения скрипта...
+                    </span>
+                  )}
+                </pre>
+              </div>
+              <div className="px-4 py-3 border-t border-slate-700/50">
+                <button
+                  onClick={handleDiagnose}
+                  disabled={isDiagnosing}
+                  title="Запустить полную диагностику системы: сервисы, BGP, туннель, маршруты, DNS, HTTP"
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
+                    isDiagnosing
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40'
+                  }`}
+                >
+                  {isDiagnosing ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i>
+                      Диагностика...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-stethoscope"></i>
+                      Диагностика
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
