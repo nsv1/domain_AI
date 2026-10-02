@@ -1,12 +1,15 @@
 #!/bin/bash
-# update-ai-router.sh - Финальная версия
-# Резолвит через чистые DNS (1.1.1.1, 8.8.8.8) напрямую через туннель
+# update-ai-router.sh v3.3 - Все функции + оптимизации
+# Резолвит через 5 DNS с таймаутами, сохраняет подробные логи
 
 DOMAINS_FILE="/etc/ai-domains.list"
 LOG_FILE="/var/log/ai-router.log"
 INTERFACE="awg0"
-# Используем чистые DNS напрямую (они идут через туннель awg0)
-DNS_SERVERS=("1.1.1.1" "8.8.8.8" "1.0.0.1")
+FRR_PREFIX_LIST="AI-NETWORKS"
+# ВСЕ 5 DNS-серверов для максимального покрытия GeoDNS
+DNS_SERVERS=("1.1.1.1" "8.8.8.8" "1.0.0.1" "9.9.9.9" "208.67.222.222")
+
+PROTECTED_IPS=("1.1.1.1" "8.8.8.8" "1.0.0.1" "9.9.9.9" "208.67.222.222")
 
 log() {
     local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -21,15 +24,13 @@ separator() {
 }
 
 separator
-log "🚀 Начало обновления маршрутов"
+log "🚀 Начало обновления маршрутов (v3.3 полная версия)"
 
-# Проверка файла доменов
 if [ ! -f "$DOMAINS_FILE" ]; then
     log "❌ Файл доменов не найден: $DOMAINS_FILE"
     exit 1
 fi
 
-# Чтение доменов (игнорируем комментарии и пустые строки)
 DOMAINS=$(grep -v '^#' "$DOMAINS_FILE" | grep -v '^---' | grep -v '^[[:space:]]*$' || true)
 if [ -z "$DOMAINS" ]; then
     log "❌ Нет доменов для обработки"
@@ -39,61 +40,134 @@ fi
 DOMAIN_COUNT=$(echo "$DOMAINS" | wc -l)
 log "📋 Найдено доменов: $DOMAIN_COUNT"
 
-# Резолвинг через чистые DNS
-log "🔍 Резолвинг DNS через 1.1.1.1/8.8.8.8..."
-ALL_IPS=""
+log "🔍 Резолвинг DNS через 5 серверов (с таймаутами 2с)..."
+
+ALL_IPS_FILE=$(mktemp)
 RESOLVED=0
 FAILED=0
+TOTAL=$DOMAIN_COUNT
+CURRENT=0
 
 while IFS= read -r domain; do
     [ -z "$domain" ] && continue
+    CURRENT=$((CURRENT + 1))
     
-    # Пробуем резолвить через каждый DNS
-    IPS=""
+    DOMAIN_IPS_FILE=$(mktemp)
+    DOMAIN_RESOLVED=false
+    
+    # Пробуем каждый из 5 DNS с таймаутом 2 секунды
     for dns in "${DNS_SERVERS[@]}"; do
-        IPS=$(dig @"$dns" +short "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
-        [ -n "$IPS" ] && break
+        IPS=$(dig @"$dns" +short +time=2 +tries=1 "$domain" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+        
+        if [ -n "$IPS" ]; then
+            DOMAIN_RESOLVED=true
+            echo "$IPS" >> "$DOMAIN_IPS_FILE"
+            echo "$IPS" >> "$ALL_IPS_FILE"
+        fi
     done
     
-    if [ -n "$IPS" ]; then
-        while IFS= read -r ip; do
-            [ -z "$ip" ] && continue
-            if ! echo "$ALL_IPS" | grep -q "^${ip}$" 2>/dev/null; then
-                ALL_IPS="${ALL_IPS}${ip}\n"
-            fi
-        done <<< "$IPS"
+    if [ "$DOMAIN_RESOLVED" = true ]; then
         RESOLVED=$((RESOLVED + 1))
-        log "  ✅ $domain → $(echo $IPS | tr '\n' ' ')"
+        UNIQUE_FOR_DOMAIN=$(sort -u "$DOMAIN_IPS_FILE" | wc -l | tr -d ' ')
+        IP_LIST=$(sort -u "$DOMAIN_IPS_FILE" | tr '\n' ' ')
+        log "  ✅ $domain → $UNIQUE_FOR_DOMAIN IP ($IP_LIST)"
     else
         FAILED=$((FAILED + 1))
         log "  ❌ $domain — не удалось разрешить"
     fi
+    
+    rm -f "$DOMAIN_IPS_FILE"
+    
+    # Показываем прогресс каждые 10 доменов
+    [ $((CURRENT % 10)) -eq 0 ] && log "  📊 Прогресс: $CURRENT/$TOTAL доменов"
+    
 done <<< "$DOMAINS"
 
-# Подсчёт уникальных IP
-IP_COUNT=0
-if [ -n "$ALL_IPS" ]; then
-    IP_COUNT=$(echo -e "$ALL_IPS" | grep -c '[0-9]' 2>/dev/null || echo "0")
-fi
+# Уникальные IP (sort -u убирает дубликаты)
+UNIQUE_IPS=$(sort -u "$ALL_IPS_FILE" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+IP_COUNT=$(echo "$UNIQUE_IPS" | grep -c '[0-9]' || echo "0")
 
 log "📊 Resolved: $RESOLVED доменов, $IP_COUNT уникальных IP, Failed: $FAILED"
+
+rm -f "$ALL_IPS_FILE"
 
 if [ "$IP_COUNT" -eq 0 ]; then
     log "❌ Не удалось получить ни одного IP-адреса"
     exit 1
 fi
 
-# Обновление маршрутов
-log "🔄 Обновление маршрутов через $INTERFACE..."
+# Очистка старых маршрутов
+log "🧹 Очистка старых маршрутов через $INTERFACE..."
 
-echo -e "$ALL_IPS" | grep '[0-9]' 2>/dev/null | while IFS= read -r ip; do
+PROTECTED_FILE=$(mktemp)
+printf '%s\n' "${PROTECTED_IPS[@]}" > "$PROTECTED_FILE"
+
+ip route show dev "$INTERFACE" 2>/dev/null | awk '{print $1}' | grep -v -F -f "$PROTECTED_FILE" > /tmp/routes_to_del.txt || true
+
+DELETED=0
+if [ -s /tmp/routes_to_del.txt ]; then
+    while IFS= read -r route; do
+        [ -z "$route" ] && continue
+        ip route del "$route" dev "$INTERFACE" 2>/dev/null && DELETED=$((DELETED + 1))
+    done < /tmp/routes_to_del.txt
+fi
+
+PROTECTED_COUNT=$(ip route show dev "$INTERFACE" 2>/dev/null | wc -l | tr -d ' ')
+log "✅ Удалено: $DELETED маршрутов, защищённых осталось: $PROTECTED_COUNT"
+
+rm -f /tmp/routes_to_del.txt "$PROTECTED_FILE"
+
+# Добавление новых маршрутов
+log "🔄 Добавление новых маршрутов через $INTERFACE..."
+
+ADDED=0
+FAILED_ADD=0
+while IFS= read -r ip; do
     [ -z "$ip" ] && continue
-    ip route replace "$ip" dev "$INTERFACE" 2>/dev/null || \
-    ip route add "$ip" dev "$INTERFACE" 2>/dev/null || \
-    log "  ⚠️ Не удалось добавить маршрут для $ip"
-done || true
+    if ip route replace "$ip" dev "$INTERFACE" 2>/dev/null; then
+        ADDED=$((ADDED + 1))
+    else
+        FAILED_ADD=$((FAILED_ADD + 1))
+        log "  ⚠️ Не удалось добавить: $ip"
+    fi
+done <<< "$UNIQUE_IPS"
 
-log "✅ Маршруты обновлены: $IP_COUNT IP через $INTERFACE"
+log "✅ Добавлено: $ADDED, ошибок: $FAILED_ADD"
+
+# Обновление FRR prefix-list
+if command -v vtysh &> /dev/null; then
+    log "🔄 Обновление FRR prefix-list $FRR_PREFIX_LIST..."
+    
+    TEMP_FILE=$(mktemp)
+    echo "no ip prefix-list $FRR_PREFIX_LIST" >> "$TEMP_FILE"
+    
+    SEQ=5
+    while IFS= read -r ip; do
+        [ -z "$ip" ] && continue
+        echo "ip prefix-list $FRR_PREFIX_LIST seq $SEQ permit $ip/32" >> "$TEMP_FILE"
+        SEQ=$((SEQ + 5))
+    done <<< "$UNIQUE_IPS"
+    
+    log "  Применяем $IP_COUNT записей в FRR..."
+    vtysh -f "$TEMP_FILE" 2>&1 | grep -v "^$" >> "$LOG_FILE"
+    
+    if [ ${PIPESTATUS[0]} -eq 0 ]; then
+        log "✅ FRR prefix-list обновлён ($IP_COUNT записей)"
+        
+        log "  Сохраняем конфигурацию..."
+        vtysh -c "write memory" 2>&1 | grep -v "^$" >> "$LOG_FILE"
+        
+        log "🔄 BGP soft-reconfiguration..."
+        vtysh -c "clear ip bgp * soft out" 2>&1 | grep -v "^$" >> "$LOG_FILE"
+        log "✅ BGP анонсы обновлены"
+    else
+        log "❌ Ошибка применения конфига FRR"
+    fi
+    
+    rm -f "$TEMP_FILE"
+else
+    log "⚠️ FRR (vtysh) не найден — пропускаем обновление prefix-list"
+fi
 
 separator
 log "✅ Обновление завершено успешно"
