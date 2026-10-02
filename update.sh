@@ -12,10 +12,14 @@ echo "📥 Получение изменений..."
 git pull origin main
 
 echo "📦 Установка зависимостей фронтенда..."
-if [ ! -d "node_modules" ]; then
-  npm install
-else
-  npm ci
+npm install --include=dev
+
+# Проверяем, что vite установлен
+if [ ! -f "$SCRIPT_DIR/node_modules/.bin/vite" ]; then
+  echo "❌ Ошибка: vite не установлен в node_modules/.bin/"
+  echo "Попытка переустановки..."
+  rm -rf node_modules package-lock.json
+  npm install --include=dev
 fi
 
 echo "🔨 Сборка фронтенда..."
