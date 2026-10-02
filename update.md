@@ -154,11 +154,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
         
-        # Важно: сборка фронтенда (vite build) может длиться больше 3 минут.
-        # Если таймаут меньше, nginx отдаст 502/504 с HTML-страницей вместо JSON.
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_read_timeout 180s;
     }
 }
 ```
