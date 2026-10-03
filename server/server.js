@@ -236,9 +236,15 @@ app.get('/api/diagnose', (req, res) => {
 });
 
 // API: Обновление приложения
+// update.sh в конце выполняет `sudo systemctl restart ai-router-manager`,
+// т.е. перезапускает этот же процесс. Поэтому ответ клиенту отправляется
+// сразу после запуска скрипта (до перезапуска сервиса), а вывод дописывается
+// в файл лога, который можно посмотреть после завершения обновления.
+const UPDATE_LOG_FILE = process.env.UPDATE_LOG_FILE || '/var/log/ai-router-update.log';
+
 app.get('/api/update', (req, res) => {
   const UPDATE_SCRIPT = path.join(__dirname, '..', 'update.sh');
-  
+
   if (!fs.existsSync(UPDATE_SCRIPT)) {
     return res.status(404).json({
       error: 'Скрипт обновления не найден',
@@ -246,9 +252,18 @@ app.get('/api/update', (req, res) => {
     });
   }
 
+  // Защита от повторного запуска во время идущего обновления
+  if (global.__aiRouterUpdating) {
+    return res.status(409).json({
+      error: 'Обновление уже выполняется',
+      log: '⚠️ Дождитесь завершения текущего обновления.',
+    });
+  }
+  global.__aiRouterUpdating = true;
+
   const projectDir = path.join(__dirname, '..');
   const child = spawn('bash', [UPDATE_SCRIPT], {
-    env: { 
+    env: {
       ...process.env,
       PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
     },
@@ -257,45 +272,64 @@ app.get('/api/update', (req, res) => {
   });
 
   let output = '';
+  let responseSent = false;
+
+  const appendToLog = (text) => {
+    try {
+      fs.appendFileSync(UPDATE_LOG_FILE, text);
+    } catch (e) {
+      console.error(`Не удалось записать лог обновления: ${e.message}`);
+    }
+  };
 
   const handleData = (data) => {
     const chunk = data.toString();
     output += chunk;
     process.stdout.write('[UPDATE] ' + chunk);
+    // После отправки ответа сервер может быть перезапущен скриптом —
+    // пишем вывод в файл, чтобы его можно было посмотреть после апдейта
+    if (responseSent) appendToLog(chunk);
   };
 
   child.stdout.on('data', handleData);
   child.stderr.on('data', handleData);
 
+  // Отвечаем клиенту сразу, НЕ дожидаясь завершения скрипта:
+  // иначе nginx получит 502 (бэкенд будет перезапущен раньше, чем
+  // успеет прийти ответ) или обрыв соединения при долгом выполнении.
+  appendToLog(`\n=== Обновление запущено: ${new Date().toISOString()} ===\n`);
+  res.json({
+    success: true,
+    started: true,
+    exitCode: null,
+    log:
+      '🔄 Скрипт обновления запущен. В конце он перезапустит сервис, ' +
+      'поэтому итоговый вывод недоступен через API.\n' +
+      `Полный лог: ${UPDATE_LOG_FILE}\n` +
+      'Обновите страницу через 1-2 минуты после завершения.\n\n',
+  });
+  responseSent = true;
+
   const timeout = setTimeout(() => {
+    console.error('Обновление остановлено по таймауту (600 сек)');
+    appendToLog(`\n⏱ Принудительная остановка обновления по таймауту (600 сек)\n`);
     child.kill('SIGTERM');
-    console.error('Обновление завершено по таймауту (300 сек)');
-  }, 300000);
+  }, 600000);
 
   child.on('close', (code) => {
     clearTimeout(timeout);
-    
-    if (code !== 0 && !output) {
-      return res.status(500).json({
-        error: `Обновление завершилось с кодом: ${code}`,
-        log: `❌ Обновление завершилось с кодом: ${code}\nВывод отсутствует.`,
-      });
-    }
-
-    res.json({
-      success: code === 0,
-      exitCode: code,
-      log: output || 'Обновление выполнено без вывода.',
-    });
+    global.__aiRouterUpdating = false;
+    // Если скрипт дошёл до перезапуска сервиса, этот обработчик может
+    // не выполниться — вывод уже пишется в файл в handleData
+    appendToLog(`\n=== Обновление завершилось с кодом: ${code} ===\n`);
+    console.log(`Обновление завершилось с кодом: ${code}`);
   });
 
   child.on('error', (err) => {
     clearTimeout(timeout);
+    global.__aiRouterUpdating = false;
     console.error(`Ошибка запуска обновления: ${err.message}`);
-    return res.status(500).json({
-      error: `Ошибка запуска обновления: ${err.message}`,
-      log: `❌ Ошибка запуска: ${err.message}`,
-    });
+    appendToLog(`\n❌ Ошибка запуска: ${err.message}\n`);
   });
 });
 

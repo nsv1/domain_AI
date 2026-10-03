@@ -205,6 +205,15 @@ function App() {
 
     try {
       const response = await fetch(`${API_URL}/api/update`);
+      // Ответ может быть HTML (например, 502 от nginx), поэтому
+      // сначала проверяем content type, прежде чем парсить JSON
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(
+          `Сервер вернул не-JSON ответ (HTTP ${response.status}):\n${text.slice(0, 300)}`
+        );
+      }
       const data = await response.json();
 
       if (!response.ok) {
@@ -212,6 +221,12 @@ function App() {
         if (data.log) {
           setLog(prev => prev + data.log);
         }
+      } else if (data.started) {
+        // Сервер запустил update.sh и сразу ответил: скрипт перезапустит
+        // сервис в конце, поэтому дождаться его вывода через API нельзя.
+        setLog(prev => prev + (data.log || ''));
+        setSuccess('🔄 Обновление запущено. Страница перезагрузится автоматически через 90 секунд.');
+        setTimeout(() => window.location.reload(), 90000);
       } else {
         setLog(prev => prev + data.log);
         if (data.success) {
