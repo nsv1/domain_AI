@@ -205,20 +205,6 @@ function App() {
 
     try {
       const response = await fetch(`${API_URL}/api/update`);
-
-      // Сервер может вернуть не-JSON (например, HTML страницы 502 от nginx),
-      // поэтому проверяем content-type перед JSON.parse.
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const text = await response.text();
-        setError(
-          `Сервер вернул некорректный ответ (HTTP ${response.status}). ` +
-          `Обновление могло запуститься, но сервис был перезапущен. Проверьте: journalctl -u ai-router-manager -f`
-        );
-        setLog(prev => prev + `⚠️ Неожидаемый ответ сервера (HTTP ${response.status}):\n${text.slice(0, 500)}\n`);
-        return;
-      }
-
       const data = await response.json();
 
       if (!response.ok) {
@@ -226,12 +212,6 @@ function App() {
         if (data.log) {
           setLog(prev => prev + data.log);
         }
-      } else if (data.started) {
-        // Скрипт обновления запущен на сервере и завершится перезапуском сервиса,
-        // поэтому дождаться его ответа нельзя — показываем статус запуска.
-        setLog(prev => prev + (data.log || 'Обновление запущено.'));
-        setSuccess('✅ Обновление запущено. Страница перезагрузится автоматически.');
-        setTimeout(() => window.location.reload(), 90000);
       } else {
         setLog(prev => prev + data.log);
         if (data.success) {
@@ -465,7 +445,7 @@ function App() {
                   )}
                 </pre>
               </div>
-              <div className="px-4 py-3 border-t border-slate-700/50">
+              <div className="px-4 py-3 border-t border-slate-700/50 space-y-2">
                 <button
                   onClick={handleDiagnose}
                   disabled={isDiagnosing}
@@ -485,6 +465,28 @@ function App() {
                     <>
                       <i className="fas fa-stethoscope"></i>
                       Диагностика
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={handleUpdate}
+                  disabled={isUpdating}
+                  title="Запустить обновление приложения из GitHub (/opt/ai-router-manager/update.sh)"
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
+                    isUpdating
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
+                  }`}
+                >
+                  {isUpdating ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i>
+                      Обновление...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-sync-alt"></i>
+                      Обновить версию
                     </>
                   )}
                 </button>
@@ -516,15 +518,7 @@ function App() {
                 </li>
                 <li className="flex items-start gap-2">
                   <i className="fas fa-sync-alt text-cyan-400 mt-0.5"></i>
-                  <span>Обновление: </span>
-                  <button
-                    onClick={handleUpdate}
-                    disabled={isUpdating}
-                    className={`text-blue-400 hover:text-blue-300 underline transition-colors ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Запустить обновление приложения из GitHub"
-                  >
-                    {isUpdating ? 'Обновление...' : './update.sh'}
-                  </button>
+                  <span>Обновление: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/opt/ai-router-manager/update.sh</code> — кнопка «Обновить версию» ниже</span>
                 </li>
                 <li className="flex items-start gap-2 pt-1 border-t border-slate-700/30 mt-1">
                   <i className="fas fa-book text-amber-400 mt-0.5"></i>
