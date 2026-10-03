@@ -8,6 +8,22 @@ cd "$SCRIPT_DIR"
 # Добавляем локальные бинарники в PATH
 export PATH="$SCRIPT_DIR/node_modules/.bin:$PATH"
 
+# Фикс прав доступа: при запуске из веб-интерфейса сервис работает от root,
+# а ручной запуск — от обычного пользователя. Приводим dist и node_modules
+# к владельцу текущего пользователя, чтобы vite/npm не падали с EACCES.
+RUN_USER="${SUDO_USER:-$(id -un)}"
+RUN_UID="$(id -u)"
+if [ -d "dist" ] && [ "$(stat -c '%u' dist)" != "$RUN_UID" ]; then
+  echo "🔧 Исправление прав на dist/ для пользователя $RUN_USER..."
+  sudo chown -R "$RUN_USER" dist || true
+fi
+for d in node_modules server/node_modules; do
+  if [ -d "$d" ] && [ "$(stat -c '%u' "$d")" != "$RUN_UID" ]; then
+    echo "🔧 Исправление прав на $d для пользователя $RUN_USER..."
+    sudo chown -R "$RUN_USER" "$d" || true
+  fi
+done
+
 echo "📥 Получение изменений..."
 git pull origin main
 
@@ -42,8 +58,13 @@ echo "📋 Обновление скрипта диагностики..."
 sudo cp scripts/check-vm-awg.sh /usr/local/bin/check-vm-awg.sh
 sudo chmod +x /usr/local/bin/check-vm-awg.sh
 
+echo "✅ Готово!"
+
+# Перезапуск сервиса выполняется ПОСЛЕДНИМ шагом: до этой строки HTTP-ответ
+# /api/update уже отправлен, а лог обновления дописан в файл.
+LOG_FILE="${UPDATE_LOG_FILE:-/var/log/ai-router-update.log}"
+if [ -w "$LOG_FILE" ] || touch "$LOG_FILE" 2>/dev/null; then
+  echo "===== Обновление завершено: код 0, $(date -u +%Y-%m-%dT%H:%M:%SZ) =====" >> "$LOG_FILE"
+fi
 echo "🔄 Перезапуск сервиса..."
 sudo systemctl restart ai-router-manager
-
-echo "✅ Готово!"
-sudo systemctl status ai-router-manager --no-pager

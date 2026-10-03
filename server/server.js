@@ -236,9 +236,15 @@ app.get('/api/diagnose', (req, res) => {
 });
 
 // API: Обновление приложения
+// Скрипт update.sh в конце перезапускает сам сервис (systemctl restart),
+// поэтому HTTP-ответ отправляется СРАЗУ после запуска скрипта, а его вывод
+// пишется в лог-файл. Фронтенд опрашивает /api/update-log до завершения.
+const UPDATE_LOG_FILE = process.env.UPDATE_LOG_FILE || '/var/log/ai-router-update.log';
+let updateRunning = false;
+
 app.get('/api/update', (req, res) => {
   const UPDATE_SCRIPT = path.join(__dirname, '..', 'update.sh');
-  
+
   if (!fs.existsSync(UPDATE_SCRIPT)) {
     return res.status(404).json({
       error: 'Скрипт обновления не найден',
@@ -246,57 +252,87 @@ app.get('/api/update', (req, res) => {
     });
   }
 
+  if (updateRunning) {
+    return res.status(409).json({
+      error: 'Обновление уже запущено, дождитесь его завершения',
+    });
+  }
+
   const projectDir = path.join(__dirname, '..');
+
+  // Пытаемся писать в лог-файл; если прав нет — пишем в локальный файл рядом с проектом
+  let logPath = UPDATE_LOG_FILE;
+  try {
+    fs.writeFileSync(logPath, `===== Обновление начато: ${new Date().toISOString()} =====\n`);
+  } catch {
+    logPath = path.join(projectDir, 'update.log');
+    fs.writeFileSync(logPath, `===== Обновление начато: ${new Date().toISOString()} =====\n`);
+  }
+
   const child = spawn('bash', [UPDATE_SCRIPT], {
-    env: { 
+    env: {
       ...process.env,
-      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
+      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`,
     },
     cwd: projectDir,
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
   });
+  updateRunning = true;
 
-  let output = '';
-
+  const logStream = fs.createWriteStream(logPath, { flags: 'a' });
   const handleData = (data) => {
     const chunk = data.toString();
-    output += chunk;
+    logStream.write(chunk);
     process.stdout.write('[UPDATE] ' + chunk);
   };
-
   child.stdout.on('data', handleData);
   child.stderr.on('data', handleData);
 
-  const timeout = setTimeout(() => {
-    child.kill('SIGTERM');
-    console.error('Обновление завершено по таймауту (300 сек)');
-  }, 300000);
-
   child.on('close', (code) => {
-    clearTimeout(timeout);
-    
-    if (code !== 0 && !output) {
-      return res.status(500).json({
-        error: `Обновление завершилось с кодом: ${code}`,
-        log: `❌ Обновление завершилось с кодом: ${code}\nВывод отсутствует.`,
-      });
-    }
-
-    res.json({
-      success: code === 0,
-      exitCode: code,
-      log: output || 'Обновление выполнено без вывода.',
-    });
+    logStream.write(`\n===== Обновление завершено: код ${code}, ${new Date().toISOString()} =====\n`);
+    logStream.end();
+    updateRunning = false;
+    console.log(`Обновление завершилось с кодом: ${code}`);
   });
 
   child.on('error', (err) => {
-    clearTimeout(timeout);
-    console.error(`Ошибка запуска обновления: ${err.message}`);
-    return res.status(500).json({
-      error: `Ошибка запуска обновления: ${err.message}`,
-      log: `❌ Ошибка запуска: ${err.message}`,
-    });
+    logStream.write(`\n❌ Ошибка запуска update.sh: ${err.message}\n`);
+    logStream.end();
+    updateRunning = false;
   });
+
+  // Ответ уходит ДО того, как скрипт успеет перезапустить сервис — 502 больше нет
+  res.json({
+    success: true,
+    started: true,
+    pid: child.pid,
+    logFile: logPath,
+    log: `🚀 Обновление запущено (PID ${child.pid}). Лог: ${logPath}\n`,
+  });
+});
+
+// API: Ход выполнения обновления (читается из лог-файла, переживает рестарт сервиса)
+app.get('/api/update-log', (req, res) => {
+  const candidates = [UPDATE_LOG_FILE, path.join(__dirname, '..', 'update.log')];
+  for (const p of candidates) {
+    let content = '';
+    try {
+      content = fs.readFileSync(p, 'utf8');
+    } catch {
+      continue;
+    }
+    const m = content.match(/===== Обновление завершено: код (\d+)/);
+    const finished = Boolean(m);
+    return res.json({
+      running: !finished && updateRunning,
+      finished,
+      ok: finished ? Number(m[1]) === 0 : false,
+      exitCode: finished ? Number(m[1]) : null,
+      log: content.slice(-20000), // последние ~20 КБ лога
+    });
+  }
+  res.json({ running: updateRunning, finished: false, ok: false, exitCode: null, log: '' });
 });
 
 // Раздача статики (фронтенд из ../dist/)

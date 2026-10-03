@@ -203,26 +203,83 @@ function App() {
     setSuccess('');
     setLog('🔄 Запуск обновления приложения...\n\n');
 
+    // Опрос лога обновления после старта скрипта (сервис может быть перезапущен)
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const pollLog = async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/update-log`);
+        const ct = r.headers.get('content-type') || '';
+        if (!r.ok || !ct.includes('application/json')) {
+          return; // сервер ещё не поднялся после перезапуска — продолжим опрос
+        }
+        const d = await r.json();
+        setLog(d.log || '');
+        if (d.finished) {
+          stopPolling();
+          setIsUpdating(false);
+          if (d.ok) {
+            setSuccess('✅ Обновление завершено успешно. Перезагрузите страницу.');
+          } else {
+            setError(`❌ Обновление завершилось с ошибкой (код ${d.exitCode}). Подробности в логе выше.`);
+          }
+          setTimeout(() => window.location.reload(), 5000);
+        }
+      } catch {
+        // сервер недоступен (идёт рестарт) — продолжим опрос
+      }
+    };
+
+    const startPolling = () => {
+      pollLog();
+      pollTimer = setInterval(pollLog, 1000);
+    };
+
     try {
       const response = await fetch(`${API_URL}/api/update`);
+      const contentType = response.headers.get('content-type') || '';
+
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        setError(`Сервер вернул не-JSON ответ (HTTP ${response.status}). Проверьте, что сервис ai-router-manager запущен и nginx проксирует /api/. ` +
+          `Первые строки ответа: ${text.slice(0, 120)}`);
+        setIsUpdating(false);
+        return;
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Ошибка при выполнении обновления');
-        if (data.log) {
-          setLog(prev => prev + data.log);
-        }
-      } else {
-        setLog(prev => prev + data.log);
-        if (data.success) {
-          setSuccess('✅ Обновление завершено успешно');
-        } else {
-          setSuccess(`⚠️ Обновление завершено с кодом: ${data.exitCode}`);
-        }
+        setError(data.error || 'Ошибка при запуске обновления');
+        if (data.log) setLog(prev => prev + data.log);
+        setIsUpdating(false);
+        return;
       }
+
+      if (data.started) {
+        // Скрипт запущен в фоне: показываем живой лог до завершения
+        setLog((data.log || '') + '\n⏳ Идёт обновление, полный лог ниже...\n');
+        startPolling();
+        return; // isUpdating останется true до окончания pollLog
+      }
+
+      // Обратная совместимость: сервер отдал результат целиком
+      setLog(prev => prev + (data.log || ''));
+      if (data.success) {
+        setSuccess('✅ Обновление завершено успешно');
+      } else {
+        setSuccess(`⚠️ Обновление завершено с кодом: ${data.exitCode}`);
+      }
+      setIsUpdating(false);
     } catch (e: any) {
       setError(`Ошибка подключения к серверу: ${e.message}`);
-    } finally {
+      stopPolling();
       setIsUpdating(false);
     }
   };
@@ -445,12 +502,34 @@ function App() {
                   )}
                 </pre>
               </div>
-              <div className="px-4 py-3 border-t border-slate-700/50 space-y-2">
+              <div className="px-4 py-3 border-t border-slate-700/50 flex flex-row gap-2">
+                <button
+                  onClick={handleUpdate}
+                  disabled={isUpdating}
+                  title="Запустить обновление приложения из GitHub (/opt/ai-router-manager/update.sh)"
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold text-sm transition-all ${
+                    isUpdating
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
+                  }`}
+                >
+                  {isUpdating ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i>
+                      Обновление...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-sync-alt"></i>
+                      Обновить
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={handleDiagnose}
                   disabled={isDiagnosing}
                   title="Запустить полную диагностику системы: сервисы, BGP, туннель, маршруты, DNS, HTTP"
-                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold text-sm transition-all ${
                     isDiagnosing
                       ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40'
@@ -465,28 +544,6 @@ function App() {
                     <>
                       <i className="fas fa-stethoscope"></i>
                       Диагностика
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={handleUpdate}
-                  disabled={isUpdating}
-                  title="Запустить обновление приложения из GitHub (/opt/ai-router-manager/update.sh)"
-                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold text-sm transition-all ${
-                    isUpdating
-                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40'
-                  }`}
-                >
-                  {isUpdating ? (
-                    <>
-                      <i className="fas fa-spinner fa-spin"></i>
-                      Обновление...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-sync-alt"></i>
-                      Обновить версию
                     </>
                   )}
                 </button>
@@ -518,7 +575,7 @@ function App() {
                 </li>
                 <li className="flex items-start gap-2">
                   <i className="fas fa-sync-alt text-cyan-400 mt-0.5"></i>
-                  <span>Обновление: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/opt/ai-router-manager/update.sh</code> — кнопка «Обновить версию» ниже</span>
+                  <span>Обновление: <code className="text-blue-300 bg-slate-700/50 px-1 rounded">/opt/ai-router-manager/update.sh</code></span>
                 </li>
                 <li className="flex items-start gap-2 pt-1 border-t border-slate-700/30 mt-1">
                   <i className="fas fa-book text-amber-400 mt-0.5"></i>
