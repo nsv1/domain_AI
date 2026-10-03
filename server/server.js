@@ -263,10 +263,25 @@ app.get('/api/update', (req, res) => {
 
   updateInProgress = true;
 
+  // Сервис работает под root, поэтому явно указываем реального пользователя
+  // (владельца проекта), чтобы update.sh создал dist/ и node_modules/ с
+  // корректными правами. Иначе последующий ручной ./update.sh от обычного
+  // пользователя упадёт с EACCES. Переопределяется через ENV UPDATE_USER
+  // (по умолчанию — владелец директории проекта).
+  let updateOwner;
+  try {
+    const st = fs.statSync(projectDir);
+    const uid = process.env.UPDATE_UID ?? st.uid;
+    updateOwner = typeof uid === 'number' ? String(uid) : String(process.env.UPDATE_USER || uid);
+  } catch {
+    updateOwner = process.env.UPDATE_USER || '';
+  }
+
   const child = spawn('bash', [UPDATE_SCRIPT], {
     env: {
       ...process.env,
-      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
+      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`,
+      ...(updateOwner ? { SUDO_USER: updateOwner } : {}),
     },
     cwd: projectDir,
     stdio: ['ignore', 'pipe', 'pipe'],
