@@ -205,6 +205,20 @@ function App() {
 
     try {
       const response = await fetch(`${API_URL}/api/update`);
+
+      // Сервер может вернуть не-JSON (например, HTML страницы 502 от nginx),
+      // поэтому проверяем content-type перед JSON.parse.
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        setError(
+          `Сервер вернул некорректный ответ (HTTP ${response.status}). ` +
+          `Обновление могло запуститься, но сервис был перезапущен. Проверьте: journalctl -u ai-router-manager -f`
+        );
+        setLog(prev => prev + `⚠️ Неожидаемый ответ сервера (HTTP ${response.status}):\n${text.slice(0, 500)}\n`);
+        return;
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -212,6 +226,12 @@ function App() {
         if (data.log) {
           setLog(prev => prev + data.log);
         }
+      } else if (data.started) {
+        // Скрипт обновления запущен на сервере и завершится перезапуском сервиса,
+        // поэтому дождаться его ответа нельзя — показываем статус запуска.
+        setLog(prev => prev + (data.log || 'Обновление запущено.'));
+        setSuccess('✅ Обновление запущено. Страница перезагрузится автоматически.');
+        setTimeout(() => window.location.reload(), 90000);
       } else {
         setLog(prev => prev + data.log);
         if (data.success) {
