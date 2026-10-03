@@ -236,15 +236,9 @@ app.get('/api/diagnose', (req, res) => {
 });
 
 // API: Обновление приложения
-// update.sh в конце выполняет "systemctl restart ai-router-manager", что убивает
-// этот Node-процесс. Поэтому ответ отправляется СРАЗУ после запуска скрипта,
-// а его вывод пишется в отдельный лог-файл (переживает перезапуск сервиса).
-let updateInProgress = false;
-
 app.get('/api/update', (req, res) => {
   const UPDATE_SCRIPT = path.join(__dirname, '..', 'update.sh');
-  const UPDATE_LOG_FILE = process.env.UPDATE_LOG_FILE || '/var/log/ai-router-update.log';
-
+  
   if (!fs.existsSync(UPDATE_SCRIPT)) {
     return res.status(404).json({
       error: 'Скрипт обновления не найден',
@@ -252,64 +246,22 @@ app.get('/api/update', (req, res) => {
     });
   }
 
-  if (updateInProgress) {
-    return res.status(409).json({
-      error: 'Обновление уже выполняется',
-      log: `⏳ Обновление уже запущено. Следите за ходом выполнения: ${UPDATE_LOG_FILE}`,
-    });
-  }
-
   const projectDir = path.join(__dirname, '..');
-
-  updateInProgress = true;
-
-  // Сервис работает под root, поэтому явно указываем реального пользователя
-  // (владельца проекта), чтобы update.sh создал dist/ и node_modules/ с
-  // корректными правами. Иначе последующий ручной ./update.sh от обычного
-  // пользователя упадёт с EACCES. Переопределяется через ENV UPDATE_USER
-  // (по умолчанию — владелец директории проекта).
-  let updateOwner;
-  try {
-    const st = fs.statSync(projectDir);
-    const uid = process.env.UPDATE_UID ?? st.uid;
-    updateOwner = typeof uid === 'number' ? String(uid) : String(process.env.UPDATE_USER || uid);
-  } catch {
-    updateOwner = process.env.UPDATE_USER || '';
-  }
-
   const child = spawn('bash', [UPDATE_SCRIPT], {
-    env: {
+    env: { 
       ...process.env,
-      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`,
-      ...(updateOwner ? { SUDO_USER: updateOwner } : {}),
+      PATH: `${projectDir}/node_modules/.bin:${process.env.PATH}`
     },
     cwd: projectDir,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: false,
+    stdio: ['ignore', 'pipe', 'pipe']
   });
 
-  // Ответ отправляется до завершения скрипта — иначе перезапуск сервиса
-  // обрывает HTTP-соединение и nginx возвращает браузеру HTML "502 Bad Gateway".
-  res.json({
-    success: true,
-    started: true,
-    log: `🚀 Обновление запущено (PID ${child.pid}). Полный ход выполнения пишется в лог:\n   ${UPDATE_LOG_FILE}\n\n` +
-         `Сервис будет перезапущен автоматически по завершении скрипта.\n` +
-         `Страница обновится через ~90 секунд.`,
-  });
-
-  let logStream;
-  try {
-    logStream = fs.createWriteStream(UPDATE_LOG_FILE, { flags: 'a' });
-    logStream.write(`\n===== Обновление начато: ${new Date().toISOString()} =====\n`);
-  } catch (e) {
-    console.error(`Не удалось открыть лог-файл обновления ${UPDATE_LOG_FILE}: ${e.message}`);
-  }
+  let output = '';
 
   const handleData = (data) => {
     const chunk = data.toString();
+    output += chunk;
     process.stdout.write('[UPDATE] ' + chunk);
-    if (logStream) logStream.write(chunk);
   };
 
   child.stdout.on('data', handleData);
@@ -317,28 +269,33 @@ app.get('/api/update', (req, res) => {
 
   const timeout = setTimeout(() => {
     child.kill('SIGTERM');
-    console.error('Обновление прервано по таймауту (600 сек)');
-    if (logStream) logStream.write('\n⚠️ Обновление прервано по таймауту (600 сек)\n');
-  }, 600000);
+    console.error('Обновление завершено по таймауту (300 сек)');
+  }, 300000);
 
   child.on('close', (code) => {
     clearTimeout(timeout);
-    updateInProgress = false;
-    console.log(`Обновление завершилось с кодом: ${code}`);
-    if (logStream) {
-      logStream.write(`===== Обновление завершено: код ${code}, ${new Date().toISOString()} =====\n`);
-      logStream.end();
+    
+    if (code !== 0 && !output) {
+      return res.status(500).json({
+        error: `Обновление завершилось с кодом: ${code}`,
+        log: `❌ Обновление завершилось с кодом: ${code}\nВывод отсутствует.`,
+      });
     }
+
+    res.json({
+      success: code === 0,
+      exitCode: code,
+      log: output || 'Обновление выполнено без вывода.',
+    });
   });
 
   child.on('error', (err) => {
     clearTimeout(timeout);
-    updateInProgress = false;
     console.error(`Ошибка запуска обновления: ${err.message}`);
-    if (logStream) {
-      logStream.write(`\n❌ Ошибка запуска: ${err.message}\n`);
-      logStream.end();
-    }
+    return res.status(500).json({
+      error: `Ошибка запуска обновления: ${err.message}`,
+      log: `❌ Ошибка запуска: ${err.message}`,
+    });
   });
 });
 
