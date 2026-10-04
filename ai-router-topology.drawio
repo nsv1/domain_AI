@@ -1,0 +1,191 @@
+<mxfile host="Electron" agent="Qwen">
+  <diagram name="AI Router Topology" id="topology1">
+    <mxGraphModel dx="1367" dy="912" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontStyle=1;" value="Схема работы AI-роутера (vm-awg)" vertex="1">
+          <mxGeometry height="40" width="500" x="550" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="zone1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=14;verticalAlign=top;spacingTop=5;dashed=1;" value="Локальная сеть (192.168.0.0/21)" vertex="1">
+          <mxGeometry height="500" width="400" x="40" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="client1" parent="1" style="shape=mxgraph.network.laptop;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Клиент Manjaro&#xa;192.168.6.77&#xa;DNS: 192.168.100.2" vertex="1">
+          <mxGeometry height="80" width="100" x="80" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="client2" parent="1" style="shape=mxgraph.network.pc;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="Клиент Windows&#xa;192.168.6.80&#xa;DNS: 192.168.100.2" vertex="1">
+          <mxGeometry height="80" width="100" x="80" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="localdns" parent="1" style="shape=mxgraph.network.server;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" value="vm-dc1&#xa;(DNS сервер)&#xa;192.168.7.11" vertex="1">
+          <mxGeometry height="80" width="100" x="280" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="localserver" parent="1" style="shape=mxgraph.network.server;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="vm-snikolaev&#xa;192.168.7.50" vertex="1">
+          <mxGeometry height="80" width="100" x="280" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="zone2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=14;verticalAlign=top;spacingTop=5;" value="Cisco Firepower 1010 (BGP AS 65000)" vertex="1">
+          <mxGeometry height="500" width="200" x="520" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cisco" parent="1" style="shape=mxgraph.cisco19.router;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Cisco FTD 1010&#xa;LAN: 192.168.7.1&#xa;BGP: 192.168.100.1" vertex="1">
+          <mxGeometry height="120" width="120" x="560" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="zone3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=14;verticalAlign=top;spacingTop=5;" value="vm-awg (BGP AS 65001)" vertex="1">
+          <mxGeometry height="500" width="240" x="800" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="vmawg" parent="1" style="shape=mxgraph.network.server;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" value="vm-awg&#xa;BGP: 192.168.100.2&#xa;DNS: 192.168.100.2&#xa;awg0: 10.8.1.29&#xa;FRR + dnsmasq" vertex="1">
+          <mxGeometry height="120" width="120" x="860" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="zone4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=14;verticalAlign=top;spacingTop=5;" value="Интернет" vertex="1">
+          <mxGeometry height="500" width="440" x="1120" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="vps" parent="1" style="shape=mxgraph.network.cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" value="VPS (AmneziaWG)&#xa;IP: 72.56.119.127&#xa;Франкфурт, DE" vertex="1">
+          <mxGeometry height="100" width="140" x="1160" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="extdns" parent="1" style="shape=mxgraph.network.server;whiteSpace=wrap;html=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;" value="Внешние DNS&#xa;1.1.1.1 / 8.8.8.8" vertex="1">
+          <mxGeometry height="60" width="120" x="1160" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="ai1" parent="1" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;" value="OpenRouter&#xa;104.18.2.115" vertex="1">
+          <mxGeometry height="50" width="120" x="1350" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="ai2" parent="1" style="hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;" value="Cursor&#xa;api2.cursor.sh" vertex="1">
+          <mxGeometry height="50" width="120" x="1350" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="ai3" parent="1" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#b1ddf0;strokeColor=#10739e;fontSize=11;" value="Claude&#xa;160.79.104.10" vertex="1">
+          <mxGeometry height="50" width="120" x="1350" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="internet" parent="1" style="shape=mxgraph.network.cloud;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="Обычный&#xa;интернет&#xa;(google.com)" vertex="1">
+          <mxGeometry height="100" width="140" x="1350" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="link1" edge="1" parent="1" source="client1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;" target="cisco">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link2" edge="1" parent="1" source="client2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;" target="cisco">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link_dc1" edge="1" parent="1" source="cisco" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;entryX=1;entryY=0.75;entryDx=0;entryDy=0;exitX=-0.015;exitY=0.363;exitDx=0;exitDy=0;exitPerimeter=0;" target="localdns">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link3" edge="1" parent="1" source="cisco" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#9673a6;fontStyle=1;fontSize=11;" target="vmawg" value="BGP (AS 65000 ↔ 65001)&#xa;VLAN 192.168.100.0/31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link4" edge="1" parent="1" source="vmawg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#b85450;dashed=1;fontStyle=1;fontSize=11;" target="vps" value="AmneziaWG туннель&#xa;(awg0 → VPS)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="link5" edge="1" parent="1" source="vps" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#10739e;" target="ai1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1320" y="210" />
+              <mxPoint x="1320" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link6" edge="1" parent="1" source="vps" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#10739e;" target="ai2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1320" y="210" />
+              <mxPoint x="1320" y="255" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link7" edge="1" parent="1" source="vps" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#10739e;" target="ai3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1320" y="210" />
+              <mxPoint x="1320" y="325" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="link8" edge="1" parent="1" source="cisco" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#666666;" target="internet">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="640" />
+              <mxPoint x="1420" y="640" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontStyle=1;fontSize=12;verticalAlign=top;spacingTop=5;" value="Легенда потоков" vertex="1">
+          <mxGeometry height="200" width="500" x="40" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#82b366;fontStyle=1;" value="━ DNS к локальному серверу (vm-awg → vm-dc1)" vertex="1">
+          <mxGeometry height="30" width="380" x="120" y="675" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1line" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#82b366;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="690" as="sourcePoint" />
+            <mxPoint x="100" y="690" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg2" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#10739e;fontStyle=1;" value="━ DNS к AI-сервисам (через туннель → 1.1.1.1)" vertex="1">
+          <mxGeometry height="30" width="380" x="120" y="710" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2line" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#10739e;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="725" as="sourcePoint" />
+            <mxPoint x="100" y="725" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg3" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#b85450;fontStyle=1;" value="━ Трафик к AI-сервисам (через BGP → vm-awg → туннель)" vertex="1">
+          <mxGeometry height="30" width="400" x="120" y="745" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3line" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#b85450;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="760" as="sourcePoint" />
+            <mxPoint x="100" y="760" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg4" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#666666;fontStyle=1;" value="━ Обычный трафик (через default route в интернет)" vertex="1">
+          <mxGeometry height="30" width="380" x="120" y="780" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4line" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#666666;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="795" as="sourcePoint" />
+            <mxPoint x="100" y="795" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg5" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#9673a6;fontStyle=1;" value="━ BGP-сессия между Cisco и vm-awg" vertex="1">
+          <mxGeometry height="30" width="320" x="120" y="815" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5line" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=3;strokeColor=#9673a6;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="830" as="sourcePoint" />
+            <mxPoint x="100" y="830" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dns1" edge="1" parent="1" source="vmawg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#82b366;fontStyle=1;fontSize=10;" target="localdns" value="1. DNS: vm-snikolaev.enersys.ru">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="220" />
+              <mxPoint x="760" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dns2" edge="1" parent="1" source="vmawg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#10739e;fontStyle=1;fontSize=10;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="extdns" value="2. DNS: api2.cursor.sh">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="330.01" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="flow1" edge="1" parent="1" source="client1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#b85450;fontStyle=1;fontSize=10;curved=1;" target="ai1" value="3. HTTPS → AI-сервис">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="130" y="600" />
+              <mxPoint x="1410" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note1" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" value="Клиент отправляет ВСЕ DNS-запросы&#xa;на 192.168.100.2 (vm-awg)" vertex="1">
+          <mxGeometry height="50" width="180" x="200" y="450" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=5;" value="dnsmasq на vm-awg:&#xa;• .enersys.ru → 192.168.7.11 (vm-dc1)&#xa;• всё остальное → 1.1.1.1 / 8.8.8.8" vertex="1">
+          <mxGeometry height="60" width="220" x="810" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=5;" value="FRR анонсирует ~450 /32 префиксов&#xa;через BGP на Cisco" vertex="1">
+          <mxGeometry height="50" width="200" x="560" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="note4" parent="1" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;spacingLeft=5;" value="vm-dc1 отвечает IP-адресом&#xa;локального сервера" vertex="1">
+          <mxGeometry height="40" width="160" x="270" y="395" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
