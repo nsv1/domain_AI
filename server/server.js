@@ -27,6 +27,12 @@ const DOMAINS_FILE = process.env.DOMAINS_FILE || '/etc/ai-domains.list';
 const LOG_FILE = process.env.LOG_FILE || '/var/log/ai-router.log';
 const SCRIPT_PATH = process.env.SCRIPT_PATH || '/usr/local/bin/update-ai-router.sh';
 
+// Состояние последнего фонового запуска update-ai-router.sh
+let processScriptExit = null;   // код завершения (null — ещё не завершился)
+let processFinished = false;    // скрипт завершён (успешно или нет)
+let processError = null;        // текст ошибки запуска
+let processStartedAt = null;    // время старта для отсечки лога
+
 // Парсинг доменов из текста (убираем комментарии и пустые строки)
 function parseDomains(text) {
   return text
@@ -56,6 +62,12 @@ app.post('/api/process', async (req, res) => {
     fs.writeFileSync(DOMAINS_FILE, domainsContent, 'utf8');
     console.log(`✅ Домены сохранены в ${DOMAINS_FILE} (${parsedDomains.length} шт.)`);
 
+    // Сбрасываем состояние предыдущего запуска
+    processScriptExit = null;
+    processFinished = false;
+    processError = null;
+    processStartedAt = Date.now();
+
     // Используем spawn с shell: true для лучшей совместимости с sudo и tee
     const child = spawn(`sudo ${SCRIPT_PATH} 2>&1`, {
       env: { ...process.env },
@@ -77,54 +89,53 @@ app.post('/api/process', async (req, res) => {
       process.stderr.write('[ERR] ' + chunk);
     });
 
-    // Таймаут 120 секунд
+    // Ответ должен уйти ДО завершения скрипта: nginx/Vite прокси обрывают
+    // долгие молчаливые запросы и возвращают HTML-страницу ошибки (502/504),
+    // которую фронтенд не может распарсить как JSON. Поэтому отвечаем сразу,
+    // а лог скрипта пишем в файл — фронтенд опрашивает /api/process-log.
+    res.json({
+      success: true,
+      started: true,
+      pid: child.pid,
+      domainsCount: parsedDomains.length,
+      logFile: LOG_FILE,
+      log: output || '🚀 Скрипт запущен, живой лог ниже...\n',
+    });
+
+    // Вывод скрипта продолжается в фоне: дописываем его в LOG_FILE,
+    // чтобы /api/process-log мог отдать полный лог даже после рестарта сервиса
+    child.stdout.on('data', (data) => {
+      try { fs.appendFileSync(LOG_FILE, data.toString()); } catch { /* ignore */ }
+    });
+    child.stderr.on('data', (data) => {
+      try { fs.appendFileSync(LOG_FILE, data.toString()); } catch { /* ignore */ }
+    });
+
+    // Таймаут 300 секунд (резолвинг сотен доменов через 5 DNS занимает время)
     const timeout = setTimeout(() => {
       child.kill('SIGTERM');
-      console.error('Скрипт завершён по таймауту (120 сек)');
-    }, 120000);
+      try { fs.appendFileSync(LOG_FILE, '\n❌ Скрипт завершён по таймауту (300 сек)\n'); } catch { /* ignore */ }
+      console.error('Скрипт завершён по таймауту (300 сек)');
+    }, 300000);
 
     child.on('close', (code) => {
       clearTimeout(timeout);
-
+      processScriptExit = code;
+      processFinished = true;
       if (code !== 0) {
         console.error(`Скрипт завершился с кодом: ${code}`);
-        
-        let errorLog = `❌ Скрипт завершился с кодом: ${code}\n\n`;
-        if (output) errorLog += output;
-        else errorLog += '⚠️ Скрипт завершился с ошибкой без вывода.';
-        
-        return res.status(500).json({
-          error: `Скрипт завершился с кодом: ${code}`,
-          log: errorLog,
-        });
+        try { fs.appendFileSync(LOG_FILE, `\n❌ Скрипт завершился с кодом: ${code}\n`); } catch { /* ignore */ }
+      } else {
+        console.log('Скрипт обработки завершился успешно');
       }
-
-      // Проверяем output на пустоту
-      if (!output || output.trim() === '') {
-        const warningLog = '⚠️ Скрипт выполнен успешно, но вывод пуст. Возможно, скрипт не выводит данные или возникла проблема с буферизацией.';
-        
-        return res.json({
-          success: true,
-          domainsCount: parsedDomains.length,
-          log: warningLog,
-        });
-      }
-
-      // Возвращаем комбинированный вывод
-      res.json({
-        success: true,
-        domainsCount: parsedDomains.length,
-        log: output,
-      });
     });
 
     child.on('error', (err) => {
       clearTimeout(timeout);
       console.error(`Ошибка запуска скрипта: ${err.message}`);
-      return res.status(500).json({
-        error: `Ошибка запуска скрипта: ${err.message}`,
-        log: `❌ Ошибка запуска скрипта: ${err.message}\n\n${output || 'Вывод отсутствует.'}`,
-      });
+      processError = err.message;
+      processFinished = true;
+      try { fs.appendFileSync(LOG_FILE, `\n❌ Ошибка запуска скрипта: ${err.message}\n`); } catch { /* ignore */ }
     });
   } catch (writeError) {
     console.error(`Ошибка записи файла: ${writeError.message}`);
@@ -132,6 +143,48 @@ app.post('/api/process', async (req, res) => {
       error: `Ошибка записи файла ${DOMAINS_FILE}: ${writeError.message}`,
     });
   }
+});
+
+// API: Живой лог выполнения update-ai-router.sh (для опроса фронтендом)
+app.get('/api/process-log', (req, res) => {
+  const running = processStartedAt !== null && !processFinished && !processError;
+
+  let logText = '';
+  try {
+    const content = fs.readFileSync(LOG_FILE, 'utf8');
+    if (processStartedAt !== null) {
+      // Берём только строки текущего запуска: ищем последний разделитель/старт
+      // не раньше момента запуска скрипта
+      const startTs = new Date(processStartedAt - 5000);
+      const stampRe = /^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/;
+      const lines = content.split('\n');
+      let startIdx = 0;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const m = lines[i].match(stampRe);
+        if (m && new Date(m[1].replace(' ', 'T')) < startTs) {
+          startIdx = i + 1;
+          break;
+        }
+      }
+      logText = lines.slice(startIdx).join('\n');
+    } else {
+      logText = content;
+    }
+  } catch {
+    // Лог недоступен — отдаём то, что накопили в памяти
+    logText = '';
+  }
+
+  if (logText.length > 20000) logText = logText.slice(-20000);
+
+  res.json({
+    running,
+    finished: processFinished || processError !== null,
+    ok: processFinished && processScriptExit === 0,
+    exitCode: processScriptExit,
+    error: processError,
+    log: logText,
+  });
 });
 
 // API: Получить текущее содержимое файла доменов
