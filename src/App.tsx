@@ -83,6 +83,11 @@ function App() {
     }
   };
 
+  const domainCount = domains
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('#') && l !== '---').length;
+
   const handleProcess = async () => {
     if (!domains.trim()) {
       setError('Введите список доменов для обработки');
@@ -112,6 +117,40 @@ function App() {
 
     startSteps();
 
+    // Опрос живого лога: скрипт выполняется в фоне на сервере,
+    // поэтому HTTP-ответ приходит сразу и прокси не успевает оборвать соединение
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    const stopPolling = () => {
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const pollLog = async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/process-log`);
+        const ct = r.headers.get('content-type') || '';
+        if (!r.ok || !ct.includes('application/json')) return;
+        const d = await r.json();
+        if (d.log) setLog(d.log);
+        if (d.finished) {
+          stopPolling();
+          clearSteps();
+          setCurrentStep(7);
+          setTimeout(() => setCurrentStep(0), 2000);
+          if (d.ok) {
+            setSuccess(`✅ Обработка завершена. Доменов: ${domainCount}`);
+            fetchStatus();
+          } else {
+            setError(`❌ Скрипт завершился с кодом: ${d.exitCode ?? '—'}${d.error ? ` (${d.error})` : ''}. Подробности в логе выше.`);
+          }
+        }
+      } catch {
+        // Временная недоступность — продолжим опрос
+      }
+    };
+
     try {
       const response = await fetch(`${API_URL}/api/process`, {
         method: 'POST',
@@ -121,25 +160,52 @@ function App() {
         body: JSON.stringify({ domains }),
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        // Прокси/сервер вернул HTML вместо JSON — показываем понятную ошибку
+        const text = await response.text();
+        throw new Error(
+          `Сервер вернул не-JSON ответ (HTTP ${response.status}). Проверьте, что API сервер запущен (node server.js) и nginx проксирует /api/. ` +
+          `Первые строки ответа: ${text.slice(0, 120)}`
+        );
+      }
+
       const data = await response.json();
 
       if (!response.ok) {
         setError(data.error || 'Произошла ошибка при обработке');
-        if (data.log) {
-          setLog(data.log);
-        }
-      } else {
-        setSuccess(`✅ Обработка завершена. Доменов: ${data.domainsCount}`);
-        setLog(data.log || 'Скрипт выполнен успешно.');
-        fetchStatus();
+        if (data.log) setLog(data.log);
+        clearSteps();
+        setCurrentStep(7);
+        setTimeout(() => setCurrentStep(0), 2000);
+        return;
       }
-    } catch (e: any) {
-      setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
-    } finally {
+
+      if (data.started) {
+        // Скрипт запущен в фоне — опрашиваем живой лог до завершения
+        setLog((prev) => (prev ? prev : '') + (data.log || '🚀 Скрипт запущен...\n'));
+        pollLog();
+        pollTimer = setInterval(pollLog, 1000);
+        return;
+      }
+
+      // Обратная совместимость: сервер отдал результат целиком
       clearSteps();
-      setCurrentStep(7); // Все этапы завершены
-      // Через 2 секунды сбрасываем в idle
+      setCurrentStep(7);
       setTimeout(() => setCurrentStep(0), 2000);
+      setSuccess(`✅ Обработка завершена. Доменов: ${data.domainsCount}`);
+      setLog(data.log || 'Скрипт выполнен успешно.');
+      fetchStatus();
+    } catch (e: any) {
+      stopPolling();
+      setError(`Ошибка подключения к серверу: ${e.message}. Убедитесь, что API сервер запущен (node server.js)`);
+      clearSteps();
+      setCurrentStep(0);
+    } finally {
+      // Если опрос не запущен (ошибка/синхронный ответ) — убираем шаги
+      if (pollTimer === null) {
+        clearSteps();
+      }
     }
   };
 
@@ -283,11 +349,6 @@ function App() {
       setIsUpdating(false);
     }
   };
-
-  const domainCount = domains
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l && !l.startsWith('#') && l !== '---').length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
